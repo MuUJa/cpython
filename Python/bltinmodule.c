@@ -21,7 +21,6 @@
 #  include <unistd.h>             // isatty()
 #endif
 
-
 static PyObject*
 update_bases(PyObject *bases, PyObject *const *args, Py_ssize_t nargs)
 {
@@ -3381,6 +3380,7 @@ _PyBuiltin_Init(PyInterpreterState *interp)
     SETBUILTIN("slice",                 &PySlice_Type);
     SETBUILTIN("staticmethod",          &PyStaticMethod_Type);
     SETBUILTIN("str",                   &PyUnicode_Type);
+    SETBUILTIN("_str",                  &PyUTF8Str_Type);
     SETBUILTIN("super",                 &PySuper_Type);
     SETBUILTIN("tuple",                 &PyTuple_Type);
     SETBUILTIN("type",                  &PyType_Type);

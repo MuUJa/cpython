@@ -556,6 +556,7 @@ OBJECT_OBJS=	\
 		Objects/typeobject.o \
 		Objects/typevarobject.o \
 		Objects/unicodeobject.o \
+		Objects/strobject.o \
 		Objects/unicodectype.o \
 		Objects/unionobject.o \
 		Objects/weakrefobject.o \
@@ -1120,6 +1121,7 @@ PYTHON_HEADERS= \
 		$(srcdir)/Include/refcount.h \
 		$(srcdir)/Include/setobject.h \
 		$(srcdir)/Include/sliceobject.h \
+		$(srcdir)/Include/strobject.h \
 		$(srcdir)/Include/structmember.h \
 		$(srcdir)/Include/structseq.h \
 		$(srcdir)/Include/sysmodule.h \
@@ -1952,6 +1954,7 @@ Objects/bytes_methods.o: $(srcdir)/Objects/bytes_methods.c $(BYTESTR_DEPS)
 Objects/bytesobject.o: $(srcdir)/Objects/bytesobject.c $(BYTESTR_DEPS)
 Objects/bytearrayobject.o: $(srcdir)/Objects/bytearrayobject.c $(BYTESTR_DEPS)
 
+Objects/strobject.o: $(srcdir)/Objects/strobject.c $(UNICODE_DEPS)
 Objects/unicodeobject.o: $(srcdir)/Objects/unicodeobject.c $(UNICODE_DEPS)
 
 Objects/dictobject.o: $(srcdir)/Objects/stringlib/eq.h

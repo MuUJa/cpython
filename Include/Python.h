@@ -78,6 +78,7 @@
 #include "cpython/pydebug.h"
 #include "bytearrayobject.h"
 #include "bytesobject.h"
+#include "strobject.h"
 #include "unicodeobject.h"
 #include "pyerrors.h"
 #include "longobject.h"
