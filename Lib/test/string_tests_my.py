@@ -8,7 +8,7 @@ from collections import UserList
 import random
 
 
-str_type = str
+str_type = _str
 
 
 class Sequence:
