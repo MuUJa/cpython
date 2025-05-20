@@ -1,13 +1,14 @@
 #include "Python.h"
 #include "strobject.h"
 #include "pycore_object.h"
+#include "pycore_bytesobject.h"   // _PyBytes_Repeat()
 
 
 // StringZilla like
-int export_string_like(PyObject *object, const char **data, Py_ssize_t *length) {
+int export_string_like(PyObject *object, const char **data, Py_ssize_t *byte_count) {
     if (PyUnicode_Check(object)) {
         // Handle Python `str` object
-        *data = PyUnicode_AsUTF8AndSize(object, length);
+        *data = PyUnicode_AsUTF8AndSize(object, byte_count);
         if (*data == NULL) {
             return 0;
         }
@@ -16,7 +17,7 @@ int export_string_like(PyObject *object, const char **data, Py_ssize_t *length) 
     else if (PyBytes_Check(object)) {
         // Handle Python `bytes` object
         // https://docs.python.org/3/c-api/bytes.html
-        if (PyBytes_AsStringAndSize(object, (char **)data, length) == -1) {
+        if (PyBytes_AsStringAndSize(object, (char **)data, byte_count) == -1) {
             PyErr_SetString(PyExc_ValueError, "Couldn't access `bytes` buffer internals");
             return 0;
         }
@@ -26,12 +27,12 @@ int export_string_like(PyObject *object, const char **data, Py_ssize_t *length) 
         // Handle Python mutable `bytearray` object
         // https://docs.python.org/3/c-api/bytearray.html
         *data = PyByteArray_AS_STRING(object);
-        *length = PyByteArray_GET_SIZE(object);
+        *byte_count = PyByteArray_GET_SIZE(object);
         return 1;
     }
     else if (PyObject_TypeCheck(object, &PyUTF8Str_Type)) {
-        *data = PyUTF8Str_GET_DATA(object);
-        *length = PyUTF8Str_GET_LENGTH(object);
+        *data = PyUTF8Str_DATA(object);
+        *byte_count = PyUTF8Str_GET_BYTE_COUNT(object);
         return 1;
     }
     else if (PyMemoryView_Check(object)) {
@@ -56,13 +57,87 @@ int export_string_like(PyObject *object, const char **data, Py_ssize_t *length) 
         }
 
         *data = (char *)view->buf;
-        *length = view->len;
+        *byte_count = view->len;
         return 1;
     }
     else {
         PyErr_SetString(PyExc_TypeError, "Unsupported argument type");
         return 0;
     }
+}
+
+int _PyUTF8Str_IsASCII(PyObject * self) {
+    assert(PyUTF8Str_Check(self));
+
+    Py_ssize_t nchar = PyUTF8Str_GET_BYTE_COUNT(self);
+    PY_INT64_T * block_data = (PY_INT64_T *)PyUTF8Str_DATA(self);
+    while (nchar > 15) {
+        PY_INT64_T block1 = *(block_data++);
+        PY_INT64_T block2 = *(block_data++);
+        // check if have have header bits 
+        if ((block1 | block2) & 0x8080808080808080) {
+            return 0;
+        }
+        nchar -= 16;
+    }
+    char * tail = (char *)block_data;
+    while (nchar --> 0) {
+        if (*(tail++) & 0x80) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+void _PyUTF8Str_Setup_IsASCII(PyObject * self) {
+    assert(PyUTF8Str_Check(self));
+    _PyUTF8StrObject_CAST(self)->ascii = _PyUTF8Str_IsASCII(self);
+}
+
+PyObject * PyUTF8Str_New(Py_ssize_t size)
+{
+    /* Optimization for empty strings */
+    // if (size == 0) {
+    //     return unicode_get_empty();
+    // }
+
+    PyObject *obj;
+    PyUTF8StrObject *utf8;
+    Py_ssize_t struct_size;
+
+    struct_size = sizeof(PyUTF8StrObject);
+    
+
+    /* Ensure we won't overflow the size. */
+    if (size < 0) {
+        PyErr_SetString(PyExc_SystemError,
+                        "Negative size passed to PyUnicode_New");
+        return NULL;
+    }
+    if (size > (PY_SSIZE_T_MAX) - struct_size) {
+        return PyErr_NoMemory();
+    }
+
+    /* Duplicated allocation code from _PyObject_New() instead of a call to
+     * PyObject_New() so we are able to allocate space for the object and
+     * it's data buffer.
+     */
+    obj = (PyObject *) PyObject_Malloc(struct_size + (size + 1));
+    if (obj == NULL) {
+        return PyErr_NoMemory();
+    }
+    _PyObject_Init(obj, &PyUTF8Str_Type);
+
+    utf8 = (PyUTF8StrObject *)obj;
+    utf8->data = (char *)(utf8 + 1);
+    utf8->data[size] = 0;
+    utf8->byte_count = size;
+    utf8->hash = -1;
+    // result->length = -1;
+    // result->interned = 0;
+    // result->valid_utf8 = 1;
+
+    return obj;
 }
 
 static PyObject *
@@ -77,26 +152,21 @@ utf8str_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     PyObject *s = nargs >= 1 ? PyTuple_GET_ITEM(args, 0) : NULL;
 
     const char *data;
-    Py_ssize_t length;
+    Py_ssize_t byte_count;
     if (s == NULL) {
         data = NULL;
-        length = 0;
-    } else if (!export_string_like(s, &data, &length)) {
+        byte_count = 0;
+    } else if (!export_string_like(s, &data, &byte_count)) {
         return NULL;
     }
 
-    Py_ssize_t struct_size = sizeof(PyUTF8StrObject);
-    PyUTF8StrObject *self = PyObject_Malloc(struct_size + length + 1);
-    _PyObject_Init((PyObject *)self, &PyUTF8Str_Type);
-    if (self == NULL) {
-        return PyErr_NoMemory();
-    }
+    PyObject *self = PyUTF8Str_New(byte_count);
+    if (!self)
+        return NULL;
+    memcpy(PyUTF8Str_DATA(self), data, byte_count);
+    _PyUTF8Str_Setup_IsASCII(self);
 
-    self->length = length;
-    self->data = (char *)(self + 1);
-    memcpy(self->data, data, length);
-    self->data[length] = 0;
-    return (PyObject *)self;
+    return self;
 }
 
 static void
@@ -109,6 +179,22 @@ static PyObject *
 utf8str_str(PyObject *self)
 {
     return PyUnicode_FromString(((PyUTF8StrObject *)self)->data);
+}
+
+// debug version
+static PyObject *
+utf8str_repr(PyObject *self)
+{
+    Py_ssize_t len = PyUTF8Str_GET_BYTE_COUNT(self);
+    PyObject * repr = PyUTF8Str_New(len + 8);
+    char * data = PyUTF8Str_DATA(repr);
+    memcpy(data, "_str('", 6);
+    memcpy(data + 6, PyUTF8Str_DATA(self), len);
+    memcpy(data + len + 6, "')", 2);
+
+    _PyUTF8Str_Setup_IsASCII(repr);
+
+    return PyUnicode_FromString(data);
 }
 
 PyObject *
@@ -133,18 +219,30 @@ PyUTF8Str_RichCompare(PyObject *left, PyObject *right, int op)
         }
     }
 
-    Py_ssize_t left_len = PyUTF8Str_GET_LENGTH(left);
-    Py_ssize_t right_len = PyUTF8Str_GET_LENGTH(right);
+    Py_ssize_t left_len = PyUTF8Str_GET_BYTE_COUNT(left);
+    Py_ssize_t right_len = PyUTF8Str_GET_BYTE_COUNT(right);
+    Py_ssize_t min_len = Py_MIN(left_len, right_len);
 
     if ((op == Py_EQ || op == Py_NE) && left_len != right_len) {
         return PyBool_FromLong(op == Py_NE);
     }
 
-    char *left_data = PyUTF8Str_GET_DATA(left);
-    char *right_data = PyUTF8Str_GET_DATA(right);
-
-    int result = strcmp(left_data, right_data);
+    int result = memcmp(PyUTF8Str_DATA(left), PyUTF8Str_DATA(right), min_len + 1);
     Py_RETURN_RICHCOMPARE(result, 0, op);
+}
+
+PyDoc_STRVAR(utf8str_isascii__doc__,
+"isascii($self, /)\n"
+"--\n"
+"\n"
+"Return True if all characters in the string are ASCII, False otherwise.\n"
+"\n"
+"ASCII characters have code points in the range U+0000-U+007F.\n"
+"Empty string is ASCII too.");
+
+static PyObject *
+utf8str_isascii(PyObject *self) {
+    return PyBool_FromLong(PyUTF8Str_IS_ASCII(self));
 }
 
 PyObject *
@@ -168,8 +266,8 @@ PyUTF8Str_Concat(PyObject *left, PyObject *right)
 
     // TODO ? shortcuts: left == empty or right == empty
 
-    left_len = PyUTF8Str_GET_LENGTH(left);
-    right_len = PyUTF8Str_GET_LENGTH(right);
+    left_len = PyUTF8Str_GET_BYTE_COUNT(left);
+    right_len = PyUTF8Str_GET_BYTE_COUNT(right);
     if (left_len > PY_SSIZE_T_MAX - right_len) {
         PyErr_SetString(PyExc_OverflowError,
                         "strings are too large to concat");
@@ -177,27 +275,55 @@ PyUTF8Str_Concat(PyObject *left, PyObject *right)
     }
     new_len = left_len + right_len;
 
-    Py_ssize_t struct_size = sizeof(PyUTF8StrObject);
-    PyUTF8StrObject *result = PyObject_Malloc(struct_size + new_len + 1);
-    _PyObject_Init((PyObject *)result, &PyUTF8Str_Type);
-    if (result == NULL) {
-        return PyErr_NoMemory();
-    }
-
-    result->length = new_len;
-    result->data = (char *)(result + 1);
-    
-    char *left_data = PyUTF8Str_GET_DATA(left);
-    char *right_data = PyUTF8Str_GET_DATA(right);
-    memcpy(result->data, left_data, left_len);
-    memcpy(result->data + left_len, right_data, right_len);
-    result->data[new_len] = 0;
+    PyObject *result = PyUTF8Str_New(new_len);
+    if (!result)
+        return NULL;
+    memcpy(PyUTF8Str_DATA(result), PyUTF8Str_DATA(left), left_len);
+    memcpy(PyUTF8Str_DATA(result) + left_len, PyUTF8Str_DATA(right), right_len);
+    _PyUTF8Str_Setup_IsASCII(result);
 
     return (PyObject *)result;
 }
 
+static PyObject*
+PyUTF8Str_Repeat(PyObject *str, Py_ssize_t n)
+{
+    PyObject *result;
+    Py_ssize_t len, new_len;
+
+    if (n < 1)
+        return PyUTF8Str_New(0);
+
+    /* no repeat, return original string */
+    if (n == 1)
+        return Py_NewRef(str);
+
+    len = PyUTF8Str_GET_BYTE_COUNT(str);
+
+    if (len > PY_SSIZE_T_MAX / n) {
+        PyErr_SetString(PyExc_OverflowError,
+                        "repeated string is too long");
+        return NULL;
+    }
+    new_len = len * n;
+
+    result = PyUTF8Str_New(new_len);
+    if (!result)
+        return NULL;
+    _PyBytes_Repeat(PyUTF8Str_DATA(result), new_len, PyUTF8Str_DATA(str), len);
+    _PyUTF8Str_Setup_IsASCII(result);
+
+    return result;
+}
+
+static PyMethodDef utf8str_methods[] = {
+    {"isascii", _PyCFunction_CAST(utf8str_isascii), METH_NOARGS, utf8str_isascii__doc__},
+    {NULL, NULL}
+};
+
 static PySequenceMethods utf8str_as_sequence = {
     .sq_concat = PyUTF8Str_Concat,
+    .sq_repeat = PyUTF8Str_Repeat,
 };
 
 PyTypeObject PyUTF8Str_Type = {
@@ -209,6 +335,8 @@ PyTypeObject PyUTF8Str_Type = {
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
     .tp_new = utf8str_new,
     .tp_str = utf8str_str,
+    .tp_repr = utf8str_repr,
     .tp_richcompare = PyUTF8Str_RichCompare,
     .tp_as_sequence = &utf8str_as_sequence,
+    .tp_methods = utf8str_methods,
 };

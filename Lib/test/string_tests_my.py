@@ -44,6 +44,8 @@ class BaseTest:
         self.assertIs(type(self.fixtype(str_type('123'))), self.type2test)
 
     def checkequal(self, result, obj, methodname, *args, **kwargs):
+        methodname = str(methodname)
+        # ^^^ dirty fix _str
         result = self.fixtype(result)
         obj = self.fixtype(obj)
         args = self.fixtype(args)
@@ -375,8 +377,7 @@ class BaseTest:
 
     def test_find_many_lengths(self):
         haystack_repeats = [(a * 10 ** e) for e in range(6) for a in (1, 2, 5)]
-        haystacks = [(n, self.fixtype(str_type('abcab') * n + str_type('da'
-            ))) for n in haystack_repeats]
+        haystacks = [(n, str_type('abcab') * n + str_type('da')) for n in haystack_repeats]
         needle_repeats = [(a * 10 ** e) for e in range(6) for a in (1, 3)]
         needles = [(m, self.fixtype(str_type('abcab') * m + str_type('da'))
             ) for m in needle_repeats]

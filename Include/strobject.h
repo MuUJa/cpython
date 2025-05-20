@@ -35,10 +35,20 @@ static inline Py_ssize_t PyUTF8Str_GET_LENGTH(PyObject *op) {
 }
 #define PyUTF8Str_GET_LENGTH(op) PyUTF8Str_GET_LENGTH(_PyObject_CAST(op))
 
-static inline char* PyUTF8Str_GET_DATA(PyObject *op) {
+static inline Py_ssize_t PyUTF8Str_GET_BYTE_COUNT(PyObject *op) {
+    return _PyUTF8StrObject_CAST(op)->byte_count;
+}
+#define PyUTF8Str_GET_BYTE_COUNT(op) PyUTF8Str_GET_BYTE_COUNT(_PyObject_CAST(op))
+
+static inline char* PyUTF8Str_DATA(PyObject *op) {
     return _PyUTF8StrObject_CAST(op)->data;
 }
-#define PyUTF8Str_GET_DATA(op) PyUTF8Str_GET_DATA(_PyObject_CAST(op))
+#define PyUTF8Str_DATA(op) PyUTF8Str_DATA(_PyObject_CAST(op))
+
+static inline int PyUTF8Str_IS_ASCII(PyObject *op) {
+    return _PyUTF8StrObject_CAST(op)->ascii;
+}
+#define PyUTF8Str_IS_ASCII(op) PyUTF8Str_IS_ASCII(_PyObject_CAST(op))
 
 #ifdef __cplusplus
 }
