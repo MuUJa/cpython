@@ -111,6 +111,102 @@ void _PyUTF8Str_Setup_IsASCII(PyObject * self) {
     _PyUTF8StrObject_CAST(self)->ascii = utf8_is_ascii(data, data + len);
 }
 
+int utf8_validate(const unsigned char * s, const unsigned char * end) {
+    while (s < end) {
+        unsigned char ch1 = *(s++);
+        // 0b0xxxxxxx ASCII
+        if ((~ch1 >> 7) & 1) continue;
+        // 0b10xxxxxx Continuation byte
+        if ((~ch1 >> 6) & 1) {
+            // Leading byte can't be a continuation byte
+            return -1;
+        }
+        // 0b110xxxxx 2-Byte
+        if ((~ch1 >> 5) & 1) {
+            if (s + 1 > end) {
+                // Too short: ch1 must be followed with a continuation byte
+                return -2;
+            }
+            unsigned char ch2 = *(s++);
+            if ((~ch2 >> 7) & (ch2 >> 6) & 1) {
+                // Too short: ch1 must be followed with a continuation byte
+                return -2;
+            }
+
+            if (ch1 < 0b11000010) {
+                // Overlong: decoded 2-Byte character must be above U+7F
+                return -3;
+            }
+            continue;
+        }
+
+        // 0b1110xxxx 3-Byte
+        if ((~ch1 >> 4) & 1) {
+            if (s + 2 > end) {
+                // Too short: ch1 must be followed with two continuation bytes
+                return -2;
+            }
+            unsigned char ch2 = *(s++);
+            unsigned char ch3 = *(s++);
+            if (((~ch2 >> 7) & (ch2 >> 6) & 1) | ((~ch3 >> 7) & (ch3 >> 6) & 1)) {
+                // Too short: ch1 must be followed with two continuation bytes
+                return -2;
+            }
+
+            if (ch2 < 0b10100000) {
+                // Overlong: decoded 3-Byte character must be above U+7FF
+                return -3;
+            }
+            
+            if ((ch1 == 0b11101101) && ((ch2 >> 7) & 1)) {
+                // Surrogate: The decoded character must be not be in U+D800...DFFF
+                return -4;
+            }
+            continue;
+        }
+
+        // 0b11110xxx 4-Byte
+        if ((~ch1 >> 3) & 1) {
+            if (s + 3 > end) {
+                // Too short: ch1 must be followed with three continuation bytes
+                return -2;
+            }
+            unsigned char ch2 = *(s++);
+            unsigned char ch3 = *(s++);
+            unsigned char ch4 = *(s++);
+            if (((~ch2 >> 7) & (ch2 >> 6) & 1) | ((~ch3 >> 7) & (ch3 >> 6) & 1) | ((~ch4 >> 7) & (ch4 >> 6) & 1)) {
+                // Too short: ch1 must be followed with three continuation bytes
+                return -2;
+            }
+
+            if (ch2 < 0b10010000) {
+                // Overlong: decoded 4-Byte character must be above U+FFFF
+                return -3;
+            }
+
+            if (ch1 > 0b11110100 || (ch1 == 0b11110100 && ch2 > 0b10010000)) {
+                // Too Large: The decoded character must be less than or equal to U+10FFFF
+                return -5;
+            }
+            continue;
+        }
+
+        // Impossible leading byte
+        return -6;
+    }
+
+    return 0;
+}
+
+int _PyUTF8Str_Validate(PyObject * self) {
+    assert(PyUTF8Str_Check(self));
+    unsigned char * data = (unsigned char *)PyUTF8Str_DATA(self);
+    Py_ssize_t len = PyUTF8Str_GET_BYTE_COUNT(self);
+    int err = utf8_validate(data, data + len);
+    _PyUTF8StrObject_CAST(self)->valid_utf8 = (err == 0);
+    return err;
+}
+
 PyObject * PyUTF8Str_New(Py_ssize_t size)
 {
     /* Optimization for empty strings */
@@ -182,6 +278,11 @@ utf8str_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     memcpy(PyUTF8Str_DATA(self), data, byte_count);
     _PyUTF8Str_Setup_IsASCII(self);
+    int err = _PyUTF8Str_Validate(self);
+    if (!PyUTF8Str_VALID(self)) {
+        PyErr_Format(PyExc_ValueError, "Failed to validate UTF-8 string. Err: %d", err);
+        return NULL;
+    }
 
     return self;
 }

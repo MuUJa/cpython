@@ -50,6 +50,11 @@ static inline int PyUTF8Str_IS_ASCII(PyObject *op) {
 }
 #define PyUTF8Str_IS_ASCII(op) PyUTF8Str_IS_ASCII(_PyObject_CAST(op))
 
+static inline int PyUTF8Str_VALID(PyObject *op) {
+    return _PyUTF8StrObject_CAST(op)->valid_utf8;
+}
+#define PyUTF8Str_VALID(op) PyUTF8Str_VALID(_PyObject_CAST(op))
+
 #ifdef __cplusplus
 }
 #endif
