@@ -4,6 +4,21 @@
 #include "pycore_bytesobject.h"   // _PyBytes_Repeat()
 
 
+#if (SIZEOF_SIZE_T == 8)
+/* Mask to quickly check whether a C 'size_t' contains a
+   non-ASCII, UTF8-encoded char. */
+# define ASCII_CHAR_MASK 0x8080808080808080ULL
+// used to count codepoints in UTF-8 string.
+# define VECTOR_0101     0x0101010101010101ULL
+# define VECTOR_00FF     0x00ff00ff00ff00ffULL
+#elif (SIZEOF_SIZE_T == 4)
+# define ASCII_CHAR_MASK 0x80808080U
+# define VECTOR_0101     0x01010101U
+# define VECTOR_00FF     0x00ff00ffU
+#else
+# error C 'size_t' size should be either 4 or 8!
+#endif
+
 // StringZilla like
 int export_string_like(PyObject *object, const char **data, Py_ssize_t *byte_count) {
     if (PyUnicode_Check(object)) {
@@ -66,23 +81,23 @@ int export_string_like(PyObject *object, const char **data, Py_ssize_t *byte_cou
     }
 }
 
-int _PyUTF8Str_IsASCII(PyObject * self) {
-    assert(PyUTF8Str_Check(self));
-
-    Py_ssize_t nchar = PyUTF8Str_GET_BYTE_COUNT(self);
-    PY_INT64_T * block_data = (PY_INT64_T *)PyUTF8Str_DATA(self);
-    while (nchar > 15) {
-        PY_INT64_T block1 = *(block_data++);
-        PY_INT64_T block2 = *(block_data++);
-        // check if have have header bits 
-        if ((block1 | block2) & 0x8080808080808080) {
-            return 0;
+int utf8_is_ascii(const unsigned char * start, const unsigned char * end) {
+    if (end - start >= SIZEOF_SIZE_T) {
+        while (!_Py_IS_ALIGNED(start, ALIGNOF_SIZE_T)) {
+            if (0x80 & (*(start++))) {
+                return 0;
+            }
         }
-        nchar -= 16;
+        while (start + SIZEOF_SIZE_T <= end) {
+            size_t v = *(size_t*)start;
+            if (v & ASCII_CHAR_MASK) {
+                return 0;
+            }
+            start += SIZEOF_SIZE_T;
+        }
     }
-    char * tail = (char *)block_data;
-    while (nchar --> 0) {
-        if (*(tail++) & 0x80) {
+    while (start < end) {
+        if (0x80 & (*(start++))) {
             return 0;
         }
     }
@@ -91,7 +106,9 @@ int _PyUTF8Str_IsASCII(PyObject * self) {
 
 void _PyUTF8Str_Setup_IsASCII(PyObject * self) {
     assert(PyUTF8Str_Check(self));
-    _PyUTF8StrObject_CAST(self)->ascii = _PyUTF8Str_IsASCII(self);
+    unsigned char * data = (unsigned char *)PyUTF8Str_DATA(self);
+    Py_ssize_t len = PyUTF8Str_GET_BYTE_COUNT(self);
+    _PyUTF8StrObject_CAST(self)->ascii = utf8_is_ascii(data, data + len);
 }
 
 PyObject * PyUTF8Str_New(Py_ssize_t size)
