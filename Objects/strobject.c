@@ -47,7 +47,7 @@ int export_string_like(PyObject *object, const char **data, Py_ssize_t *byte_cou
     }
     else if (PyObject_TypeCheck(object, &PyUTF8Str_Type)) {
         *data = PyUTF8Str_DATA(object);
-        *byte_count = PyUTF8Str_GET_BYTE_COUNT(object);
+        *byte_count = PyUTF8Str_BYTE_COUNT(object);
         return 1;
     }
     else if (PyMemoryView_Check(object)) {
@@ -107,7 +107,7 @@ int utf8_is_ascii(const unsigned char * start, const unsigned char * end) {
 void _PyUTF8Str_Setup_IsASCII(PyObject * self) {
     assert(PyUTF8Str_Check(self));
     unsigned char * data = (unsigned char *)PyUTF8Str_DATA(self);
-    Py_ssize_t len = PyUTF8Str_GET_BYTE_COUNT(self);
+    Py_ssize_t len = PyUTF8Str_BYTE_COUNT(self);
     _PyUTF8StrObject_CAST(self)->ascii = utf8_is_ascii(data, data + len);
 }
 
@@ -201,10 +201,62 @@ int utf8_validate(const unsigned char * s, const unsigned char * end) {
 int _PyUTF8Str_Validate(PyObject * self) {
     assert(PyUTF8Str_Check(self));
     unsigned char * data = (unsigned char *)PyUTF8Str_DATA(self);
-    Py_ssize_t len = PyUTF8Str_GET_BYTE_COUNT(self);
+    Py_ssize_t len = PyUTF8Str_BYTE_COUNT(self);
     int err = utf8_validate(data, data + len);
     _PyUTF8StrObject_CAST(self)->valid_utf8 = (err == 0);
     return err;
+}
+
+// Paste utf8_count_codepoints from unicodeobejct.c
+static inline int
+scalar_utf8_start_char(unsigned int ch)
+{
+    // 0xxxxxxx or 11xxxxxx are first byte.
+    return (~ch >> 7 | ch >> 6) & 1;
+}
+
+static inline size_t
+vector_utf8_start_chars(size_t v)
+{
+    return ((~v >> 7) | (v >> 6)) & VECTOR_0101;
+}
+
+
+// Count the number of UTF-8 code points in a given byte sequence.
+static Py_ssize_t
+utf8_count_codepoints(const unsigned char *s, const unsigned char *end)
+{
+    Py_ssize_t len = 0;
+
+    if (end - s >= SIZEOF_SIZE_T) {
+        while (!_Py_IS_ALIGNED(s, ALIGNOF_SIZE_T)) {
+            len += scalar_utf8_start_char(*s++);
+        }
+
+        while (s + SIZEOF_SIZE_T <= end) {
+            const unsigned char *e = end;
+            if (e - s > SIZEOF_SIZE_T * 255) {
+                e = s + SIZEOF_SIZE_T * 255;
+            }
+            Py_ssize_t vstart = 0;
+            while (s + SIZEOF_SIZE_T <= e) {
+                size_t v = *(size_t*)s;
+                size_t vs = vector_utf8_start_chars(v);
+                vstart += vs;
+                s += SIZEOF_SIZE_T;
+            }
+            vstart = (vstart & VECTOR_00FF) + ((vstart >> 8) & VECTOR_00FF);
+            vstart += vstart >> 16;
+#if SIZEOF_SIZE_T == 8
+            vstart += vstart >> 32;
+#endif
+            len += vstart & 0x7ff;
+        }
+    }
+    while (s < end) {
+        len += scalar_utf8_start_char(*s++);
+    }
+    return len;
 }
 
 PyObject * PyUTF8Str_New(Py_ssize_t size)
@@ -246,9 +298,9 @@ PyObject * PyUTF8Str_New(Py_ssize_t size)
     utf8->data[size] = 0;
     utf8->byte_count = size;
     utf8->hash = -1;
-    // result->length = -1;
-    // result->interned = 0;
-    // result->valid_utf8 = 1;
+    utf8->length = 0;
+    utf8->valid_utf8 = 0;
+    // utf8->interned = 0;
 
     return obj;
 }
@@ -278,11 +330,13 @@ utf8str_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     memcpy(PyUTF8Str_DATA(self), data, byte_count);
     _PyUTF8Str_Setup_IsASCII(self);
-    int err = _PyUTF8Str_Validate(self);
-    if (!PyUTF8Str_VALID(self)) {
-        PyErr_Format(PyExc_ValueError, "Failed to validate UTF-8 string. Err: %d", err);
-        return NULL;
-    }
+    _PyUTF8Str_Validate(self);
+    // DEBUG:
+    // int err = _PyUTF8Str_Validate(self);
+    // if (!PyUTF8Str_VALID(self)) {
+    //     PyErr_Format(PyExc_ValueError, "Failed to validate UTF-8 string. Err: %d", err);
+    //     return NULL;
+    // }
 
     return self;
 }
@@ -303,7 +357,7 @@ utf8str_str(PyObject *self)
 static PyObject *
 utf8str_repr(PyObject *self)
 {
-    Py_ssize_t len = PyUTF8Str_GET_BYTE_COUNT(self);
+    Py_ssize_t len = PyUTF8Str_BYTE_COUNT(self);
     PyObject * repr = PyUTF8Str_New(len + 8);
     char * data = PyUTF8Str_DATA(repr);
     memcpy(data, "_str('", 6);
@@ -337,8 +391,8 @@ PyUTF8Str_RichCompare(PyObject *left, PyObject *right, int op)
         }
     }
 
-    Py_ssize_t left_len = PyUTF8Str_GET_BYTE_COUNT(left);
-    Py_ssize_t right_len = PyUTF8Str_GET_BYTE_COUNT(right);
+    Py_ssize_t left_len = PyUTF8Str_BYTE_COUNT(left);
+    Py_ssize_t right_len = PyUTF8Str_BYTE_COUNT(right);
     Py_ssize_t min_len = Py_MIN(left_len, right_len);
 
     if ((op == Py_EQ || op == Py_NE) && left_len != right_len) {
@@ -347,6 +401,24 @@ PyUTF8Str_RichCompare(PyObject *left, PyObject *right, int op)
 
     int result = memcmp(PyUTF8Str_DATA(left), PyUTF8Str_DATA(right), min_len + 1);
     Py_RETURN_RICHCOMPARE(result, 0, op);
+}
+
+static Py_hash_t
+utf8str_hash(PyObject *self)
+{
+    Py_uhash_t x;  /* Unsigned for defined overflow behavior. */
+
+#ifdef Py_DEBUG
+    assert(_Py_HashSecret_Initialized);
+#endif
+    Py_hash_t hash = PyUTF8Str_HASH(self);
+    if (hash != -1) {
+        return hash;
+    }
+    x = Py_HashBuffer(PyUTF8Str_DATA(self), PyUTF8Str_BYTE_COUNT(self));
+
+    PyUTF8Str_SET_HASH(self, x);
+    return x;
 }
 
 PyDoc_STRVAR(utf8str_isascii__doc__,
@@ -384,8 +456,8 @@ PyUTF8Str_Concat(PyObject *left, PyObject *right)
 
     // TODO ? shortcuts: left == empty or right == empty
 
-    left_len = PyUTF8Str_GET_BYTE_COUNT(left);
-    right_len = PyUTF8Str_GET_BYTE_COUNT(right);
+    left_len = PyUTF8Str_BYTE_COUNT(left);
+    right_len = PyUTF8Str_BYTE_COUNT(right);
     if (left_len > PY_SSIZE_T_MAX - right_len) {
         PyErr_SetString(PyExc_OverflowError,
                         "strings are too large to concat");
@@ -416,7 +488,7 @@ PyUTF8Str_Repeat(PyObject *str, Py_ssize_t n)
     if (n == 1)
         return Py_NewRef(str);
 
-    len = PyUTF8Str_GET_BYTE_COUNT(str);
+    len = PyUTF8Str_BYTE_COUNT(str);
 
     if (len > PY_SSIZE_T_MAX / n) {
         PyErr_SetString(PyExc_OverflowError,
@@ -434,6 +506,19 @@ PyUTF8Str_Repeat(PyObject *str, Py_ssize_t n)
     return result;
 }
 
+Py_ssize_t PyUTF8Str_Length(PyObject *self)
+{
+    Py_ssize_t len = PyUTF8Str_LENGTH(self);
+    if (len != 0 || PyUTF8Str_BYTE_COUNT(self) == 0) {
+        return len;
+    }
+    unsigned char * data = (unsigned char *)PyUTF8Str_DATA(self);
+    Py_ssize_t x = utf8_count_codepoints(data, data + PyUTF8Str_BYTE_COUNT(self));
+
+    PyUTF8Str_SET_LENGTH(self, x);
+    return x;
+}
+
 static PyMethodDef utf8str_methods[] = {
     {"isascii", _PyCFunction_CAST(utf8str_isascii), METH_NOARGS, utf8str_isascii__doc__},
     {NULL, NULL}
@@ -442,6 +527,7 @@ static PyMethodDef utf8str_methods[] = {
 static PySequenceMethods utf8str_as_sequence = {
     .sq_concat = PyUTF8Str_Concat,
     .sq_repeat = PyUTF8Str_Repeat,
+    .sq_length = PyUTF8Str_Length,
 };
 
 PyTypeObject PyUTF8Str_Type = {
@@ -455,6 +541,7 @@ PyTypeObject PyUTF8Str_Type = {
     .tp_str = utf8str_str,
     .tp_repr = utf8str_repr,
     .tp_richcompare = PyUTF8Str_RichCompare,
+    .tp_hash = utf8str_hash,
     .tp_as_sequence = &utf8str_as_sequence,
     .tp_methods = utf8str_methods,
 };

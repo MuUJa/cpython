@@ -30,15 +30,30 @@ extern PyTypeObject PyUTF8Str_Type;
     (assert(PyUTF8Str_Check(op)), \
       _Py_CAST(PyUTF8StrObject*, (op)))
 
-static inline Py_ssize_t PyUTF8Str_GET_LENGTH(PyObject *op) {
+static inline Py_ssize_t PyUTF8Str_LENGTH(PyObject *op) {
     return _PyUTF8StrObject_CAST(op)->length;
 }
-#define PyUTF8Str_GET_LENGTH(op) PyUTF8Str_GET_LENGTH(_PyObject_CAST(op))
+#define PyUTF8Str_LENGTH(op) PyUTF8Str_LENGTH(_PyObject_CAST(op))
 
-static inline Py_ssize_t PyUTF8Str_GET_BYTE_COUNT(PyObject *op) {
+static inline void PyUTF8Str_SET_LENGTH(PyObject *op, Py_ssize_t x) {
+    _PyUTF8StrObject_CAST(op)->length = x;
+}
+#define PyUTF8Str_SET_LENGTH(op, x) PyUTF8Str_SET_LENGTH(_PyObject_CAST(op), x)
+
+static inline Py_ssize_t PyUTF8Str_BYTE_COUNT(PyObject *op) {
     return _PyUTF8StrObject_CAST(op)->byte_count;
 }
-#define PyUTF8Str_GET_BYTE_COUNT(op) PyUTF8Str_GET_BYTE_COUNT(_PyObject_CAST(op))
+#define PyUTF8Str_BYTE_COUNT(op) PyUTF8Str_BYTE_COUNT(_PyObject_CAST(op))
+
+static inline Py_hash_t PyUTF8Str_HASH(PyObject *op) {
+    return _PyUTF8StrObject_CAST(op)->hash;
+}
+#define PyUTF8Str_HASH(op) PyUTF8Str_HASH(_PyObject_CAST(op))
+
+static inline void PyUTF8Str_SET_HASH(PyObject *op, Py_hash_t x) {
+    _PyUTF8StrObject_CAST(op)->hash = x;
+}
+#define PyUTF8Str_SET_HASH(op, x) PyUTF8Str_SET_HASH(_PyObject_CAST(op), x)
 
 static inline char* PyUTF8Str_DATA(PyObject *op) {
     return _PyUTF8StrObject_CAST(op)->data;
