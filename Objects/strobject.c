@@ -2,6 +2,7 @@
 #include "strobject.h"
 #include "pycore_object.h"
 #include "pycore_bytesobject.h"   // _PyBytes_Repeat()
+#include "pycore_modsupport.h"    // _PyArg_CheckPositional()
 
 
 #if (SIZEOF_SIZE_T == 8)
@@ -259,6 +260,60 @@ utf8_count_codepoints(const unsigned char *s, const unsigned char *end)
     return len;
 }
 
+// Knuth–Morris–Pratt algorithm
+void prefix_function(const unsigned char *s, Py_ssize_t *p, Py_ssize_t len) {
+    p[0] = 0;
+    for (int i = 1; i < len; i++) {
+        Py_ssize_t k = p[i - 1];
+        while (k > 0 && s[i] != s[k]) {
+            k = p[k - 1];
+        }
+        if (s[i] == s[k]) {
+            k++;
+        }
+        p[i] = k;
+    }
+}
+
+// Template must be valid (0xff is used as a separator)
+// Or think about how to separate these strings in another way
+Py_ssize_t knuth_morris_pratt(const unsigned char *text, Py_ssize_t text_len, const unsigned char *template, Py_ssize_t template_len) {
+    Py_ssize_t len = text_len + template_len + 1;
+    unsigned char *s = PyMem_Malloc(len + 1);
+    memcpy(s, template, template_len);
+    s[template_len] = 0xff;
+    memcpy(s + template_len + 1, text, text_len);
+    s[len] = 0;
+
+    Py_ssize_t *pfunc = PyMem_Calloc(len, SIZEOF_SIZE_T);
+    prefix_function(s, pfunc, len);
+    Py_ssize_t result = -1;
+    for (int i = 0; i < text_len; i++) {
+        if (pfunc[i + template_len + 1] == template_len) {
+            result = i - (template_len - 1);
+            break;
+        }
+    }
+    PyMem_Free((void *)s);
+    PyMem_Free((void *)pfunc);
+    return result;
+}
+
+Py_ssize_t byteindex2codepoint(unsigned char *s, Py_ssize_t len, Py_ssize_t index) {
+    assert(index < len);
+    return utf8_count_codepoints(s, s + index);
+}
+
+static Py_ssize_t
+find_kmp(PyObject* str, PyObject* substr) {
+    unsigned char *data = (unsigned char *)PyUTF8Str_DATA(str);
+    Py_ssize_t len = PyUTF8Str_BYTE_COUNT(str);
+    Py_ssize_t kmp_result = knuth_morris_pratt(data, len, (unsigned char *)PyUTF8Str_DATA(substr), PyUTF8Str_BYTE_COUNT(substr));
+    if (kmp_result == -1) 
+        return -1;
+    return byteindex2codepoint(data, len, kmp_result);
+}
+
 PyObject * PyUTF8Str_New(Py_ssize_t size)
 {
     /* Optimization for empty strings */
@@ -435,6 +490,57 @@ utf8str_isascii(PyObject *self) {
     return PyBool_FromLong(PyUTF8Str_IS_ASCII(self));
 }
 
+PyDoc_STRVAR(unicode_find__doc__,
+"find($self, sub[, start[, end]], /)\n"
+"--\n"
+"\n"
+"Return the lowest index in S where substring sub is found, such that sub is contained within S[start:end].\n"
+"\n"
+"Optional arguments start and end are interpreted as in slice notation.\n"
+"Return -1 on failure.");
+
+static PyObject *
+utf8str_find(PyObject *str, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *substr;
+    Py_ssize_t start = 0;
+    Py_ssize_t end = PY_SSIZE_T_MAX;
+    Py_ssize_t _return_value;
+
+    if (!_PyArg_CheckPositional("find", nargs, 1, 3)) {
+        goto exit;
+    }
+    if (!PyUTF8Str_Check(args[0])) {
+        _PyArg_BadArgument("find", "argument 1", "str", args[0]);
+        goto exit;
+    }
+    substr = args[0];
+    if (nargs < 2) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[1], &start)) {
+        goto exit;
+    }
+    if (nargs < 3) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[2], &end)) {
+        goto exit;
+    }
+skip_optional:
+    // TODO: not ignore slice
+    // _return_value = find_kmp(str, substr, start, end);
+    _return_value = find_kmp(str, substr);
+    if ((_return_value == -1) && PyErr_Occurred()) {
+        goto exit;
+    }
+    return_value = PyLong_FromSsize_t(_return_value);
+
+exit:
+    return return_value;
+}
+
 PyObject *
 PyUTF8Str_Concat(PyObject *left, PyObject *right)
 {
@@ -520,6 +626,7 @@ Py_ssize_t PyUTF8Str_Length(PyObject *self)
 }
 
 static PyMethodDef utf8str_methods[] = {
+    {"find", _PyCFunction_CAST(utf8str_find), METH_FASTCALL, unicode_find__doc__},
     {"isascii", _PyCFunction_CAST(utf8str_isascii), METH_NOARGS, utf8str_isascii__doc__},
     {NULL, NULL}
 };
