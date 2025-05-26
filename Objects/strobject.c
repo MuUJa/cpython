@@ -208,6 +208,79 @@ int _PyUTF8Str_Validate(PyObject * self) {
     return err;
 }
 
+Py_ssize_t utf8_char_len(unsigned char ch) {
+    // 0b0xxxxxxx
+    if ((~ch >> 7) & 1) return 1;
+    // 0b10xxxxxx
+    if ((~ch >> 6) & 1) return -1;
+    // 0b110xxxxx
+    if ((~ch >> 5) & 1) return 2;
+    // 0b1110xxxx
+    if ((~ch >> 4) & 1) return 3;
+    // 0b11110xxx
+    if ((~ch >> 3) & 1) return 4;
+    return -1;
+}
+
+// Forward declaration
+Py_ssize_t PyUTF8Str_Length(PyObject *self);
+
+int utf8_make_index(PyObject * self) {
+    if (_PyUTF8Str_Validate(self) < 0) {
+        PyErr_SetString(PyExc_ValueError, "String is malformed");
+        return -1;
+    }
+    Py_ssize_t len = PyUTF8Str_Length(self);
+    Py_ssize_t blocks = len / INDEX_BLOCK_SIZE + 1;
+    PyUTF8Index *index = (PyUTF8Index *)PyMem_Malloc(sizeof(PyUTF8Index) + blocks * sizeof(index_entry));
+    if (index == NULL) {
+        PyErr_NoMemory();
+        return -1;
+    }
+    PyUTF8Str_SET_INDEX(self, index);
+    index->entries = (index_entry *)(index + 1);
+    index_entry *entry = index->entries;
+    entry->base_offset = 0;
+    entry->additional_offset[0] = 0;
+    int i = 0;
+
+    Py_ssize_t byte_count = PyUTF8Str_BYTE_COUNT(self);
+    unsigned char *s = (unsigned char *)PyUTF8Str_DATA(self);
+    unsigned char *end = s + byte_count;
+    while(s < end) {
+        Py_ssize_t ch_len = utf8_char_len(*s);
+        // string must be valid
+        assert(ch_len != -1);
+
+        if (i < INDEX_BLOCK_SIZE - 1) {
+            entry->additional_offset[i + 1] = entry->additional_offset[i] + ch_len;
+            i++;
+        } else {
+            index_entry *next_entry = entry + 1;
+            next_entry->base_offset = entry->additional_offset[i] + ch_len;
+            next_entry->additional_offset[0] = 0;
+            i = 0;
+        }
+
+        s += ch_len;
+    }
+    return 0;
+}
+
+Py_ssize_t utf8_index2byte(PyObject *self, Py_ssize_t index) {
+    if (PyUTF8Str_IS_ASCII(self)) {
+        return index;
+    }
+    if (PyUTF8Str_INDEX(self) == NULL) {
+        if (utf8_make_index(self) < 0) {
+            return -1;
+        }
+    }
+    PyUTF8Index *utf8index = PyUTF8Str_INDEX(self);
+    index_entry *entry = utf8index->entries + (index / INDEX_BLOCK_SIZE);
+    return entry->base_offset + entry->additional_offset[index % INDEX_BLOCK_SIZE]; 
+}
+
 // Paste utf8_count_codepoints from unicodeobejct.c
 static inline int
 scalar_utf8_start_char(unsigned int ch)
@@ -314,6 +387,7 @@ find_kmp(PyObject* str, PyObject* substr) {
     return byteindex2codepoint(data, len, kmp_result);
 }
 
+
 PyObject * PyUTF8Str_New(Py_ssize_t size)
 {
     /* Optimization for empty strings */
@@ -355,9 +429,27 @@ PyObject * PyUTF8Str_New(Py_ssize_t size)
     utf8->hash = -1;
     utf8->length = 0;
     utf8->valid_utf8 = 0;
+    utf8->index = NULL;
     // utf8->interned = 0;
 
     return obj;
+}
+
+static PyObject *
+PyUTF8Str_FromData(unsigned char * s, Py_ssize_t byte_count) {
+    PyObject *self = PyUTF8Str_New(byte_count);
+    if (!self)
+        return NULL;
+    memcpy(PyUTF8Str_DATA(self), s, byte_count);
+    _PyUTF8Str_Setup_IsASCII(self);
+    _PyUTF8Str_Validate(self);
+    // DEBUG:
+    // int err = _PyUTF8Str_Validate(self);
+    // if (!PyUTF8Str_VALID(self)) {
+    //     PyErr_Format(PyExc_ValueError, "Failed to validate UTF-8 string. Err: %d", err);
+    //     return NULL;
+    // }
+    return self;
 }
 
 static PyObject *
@@ -380,20 +472,7 @@ utf8str_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
-    PyObject *self = PyUTF8Str_New(byte_count);
-    if (!self)
-        return NULL;
-    memcpy(PyUTF8Str_DATA(self), data, byte_count);
-    _PyUTF8Str_Setup_IsASCII(self);
-    _PyUTF8Str_Validate(self);
-    // DEBUG:
-    // int err = _PyUTF8Str_Validate(self);
-    // if (!PyUTF8Str_VALID(self)) {
-    //     PyErr_Format(PyExc_ValueError, "Failed to validate UTF-8 string. Err: %d", err);
-    //     return NULL;
-    // }
-
-    return self;
+    return PyUTF8Str_FromData((unsigned char *)data, byte_count);
 }
 
 static void
@@ -625,6 +704,29 @@ Py_ssize_t PyUTF8Str_Length(PyObject *self)
     return x;
 }
 
+static PyObject *
+PyUTF8Str_GetItem(PyObject *self, Py_ssize_t index)
+{
+    if (!PyUTF8Str_Check(self)) {
+        PyErr_BadArgument();
+        return NULL;
+    }
+    if (index < 0 || index >= PyUTF8Str_Length(self)) {
+        PyErr_SetString(PyExc_IndexError, "string index out of range");
+        return NULL;
+    }
+
+    Py_ssize_t byte_index = utf8_index2byte(self, index);
+    if (byte_index < 0) {
+        return NULL;
+    }
+
+    unsigned char * ch = (unsigned char *)PyUTF8Str_DATA(self) + byte_index;
+    Py_ssize_t ch_len = utf8_char_len(*ch);
+    
+    return PyUTF8Str_FromData(ch, ch_len);
+}
+
 static PyMethodDef utf8str_methods[] = {
     {"find", _PyCFunction_CAST(utf8str_find), METH_FASTCALL, unicode_find__doc__},
     {"isascii", _PyCFunction_CAST(utf8str_isascii), METH_NOARGS, utf8str_isascii__doc__},
@@ -635,6 +737,7 @@ static PySequenceMethods utf8str_as_sequence = {
     .sq_concat = PyUTF8Str_Concat,
     .sq_repeat = PyUTF8Str_Repeat,
     .sq_length = PyUTF8Str_Length,
+    .sq_item = PyUTF8Str_GetItem,
 };
 
 PyTypeObject PyUTF8Str_Type = {

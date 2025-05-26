@@ -9,6 +9,20 @@ extern "C" {
 
 #define WORD_SIZE (sizeof(uintptr_t) * 8)
 
+// This works because the UTF-8 encoding of a code point is at most 4 bytes, 
+// so the largest value one can need to store in additional_offsets is at most 63 * 4,
+// which fits in a uint8_t. Effectively it's a lightweight compression scheme 
+// on having just an array of all the offsets.
+#define INDEX_BLOCK_SIZE 64
+
+typedef struct {
+    uintptr_t base_offset;
+    uint8_t additional_offset[INDEX_BLOCK_SIZE];
+} index_entry;
+
+typedef struct {
+    index_entry *entries;
+} PyUTF8Index;
 
 typedef struct {
     PyObject_HEAD
@@ -18,7 +32,7 @@ typedef struct {
     uintptr_t length: (WORD_SIZE-4);    /* Number of code points in the string */
     uintptr_t byte_count;      /* Number of bytes in the string */
     Py_hash_t hash;             /* Hash value; -1 if not set */
-    // PyUnicodeIndex *index;    /* NULL unless needed */
+    PyUTF8Index *index;    /* NULL unless needed */
     char *data;
 } PyUTF8StrObject;
 
@@ -69,6 +83,16 @@ static inline int PyUTF8Str_VALID(PyObject *op) {
     return _PyUTF8StrObject_CAST(op)->valid_utf8;
 }
 #define PyUTF8Str_VALID(op) PyUTF8Str_VALID(_PyObject_CAST(op))
+
+static inline PyUTF8Index *PyUTF8Str_INDEX(PyObject *op) {
+    return _PyUTF8StrObject_CAST(op)->index;
+}
+#define PyUTF8Str_INDEX(op) PyUTF8Str_INDEX(_PyObject_CAST(op))
+
+static inline void PyUTF8Str_SET_INDEX(PyObject *op, PyUTF8Index *x) {
+    _PyUTF8StrObject_CAST(op)->index = x;
+}
+#define PyUTF8Str_SET_INDEX(op, x) PyUTF8Str_SET_INDEX(_PyObject_CAST(op), x)
 
 #ifdef __cplusplus
 }
