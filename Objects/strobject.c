@@ -181,7 +181,7 @@ int utf8_validate(const unsigned char * s, const unsigned char * end) {
                 // Overlong: decoded 3-Byte character must be above U+7FF
                 return -3;
             }
-            
+
             if ((ch1 == 0b11101101) && ((ch2 >> 7) & 1)) {
                 // Surrogate: The decoded character must be not be in U+D800...DFFF
                 return -4;
@@ -303,7 +303,7 @@ Py_ssize_t utf8_index2byte(PyObject *self, Py_ssize_t index) {
     }
     PyUTF8Index *utf8index = PyUTF8Str_INDEX(self);
     index_entry *entry = utf8index->entries + (index / INDEX_BLOCK_SIZE);
-    return entry->base_offset + entry->additional_offset[index % INDEX_BLOCK_SIZE]; 
+    return entry->base_offset + entry->additional_offset[index % INDEX_BLOCK_SIZE];
 }
 
 // Paste utf8_count_codepoints from unicodeobejct.c
@@ -375,7 +375,7 @@ void prefix_function(const unsigned char *s, Py_ssize_t *p, Py_ssize_t len) {
 
 // Template must be valid (0xff is used as a separator)
 // Or think about how to separate these strings in another way
-Py_ssize_t knuth_morris_pratt(const unsigned char *text, Py_ssize_t text_len, 
+Py_ssize_t knuth_morris_pratt(const unsigned char *text, Py_ssize_t text_len,
                         const unsigned char *template, Py_ssize_t template_len) {
     Py_ssize_t len = text_len + template_len + 1;
     unsigned char *s = PyMem_Malloc(len + 1);
@@ -424,9 +424,9 @@ find_kmp(PyObject* str, PyObject* substr, Py_ssize_t start, Py_ssize_t end) {
 
     unsigned char *data = (unsigned char *)PyUTF8Str_DATA(str);
     Py_ssize_t byte_count = PyUTF8Str_BYTE_COUNT(str);
-    Py_ssize_t kmp_result = knuth_morris_pratt(data + start_byte, end_byte - start_byte, 
+    Py_ssize_t kmp_result = knuth_morris_pratt(data + start_byte, end_byte - start_byte,
                             (unsigned char *)PyUTF8Str_DATA(substr), substr_byte_count);
-    if (kmp_result == -1) 
+    if (kmp_result == -1)
         return -1;
     return byteindex2codepoint(data, byte_count, start_byte + kmp_result);
 }
@@ -441,12 +441,12 @@ _PyUTF8Str_JoinArray(PyObject *separator, PyObject *const *items, Py_ssize_t seq
     if (seqlen == 0) {
         return PyUTF8Str_FromData((unsigned char *)"", 0);
     }
-    
+
     /* Set up sep and seplen */
     // I think it is for CAPI, usually separator can't be NULL
     if (separator == NULL) {
         /* fall back to a blank space separator */
-        // Not sure here. 
+        // Not sure here.
         sep = PyUTF8Str_FromData((unsigned char *)" ", 1);
         if (sep == NULL)
             goto onError;
@@ -531,7 +531,7 @@ PyObject * PyUTF8Str_New(Py_ssize_t size)
     Py_ssize_t struct_size;
 
     struct_size = sizeof(PyUTF8StrObject);
-    
+
 
     /* Ensure we won't overflow the size. */
     if (size < 0) {
@@ -888,8 +888,21 @@ PyUTF8Str_GetItem(PyObject *self, Py_ssize_t index)
 
     unsigned char * ch = (unsigned char *)PyUTF8Str_DATA(self) + byte_index;
     Py_ssize_t ch_len = utf8_char_len(*ch);
-    
+
     return PyUTF8Str_FromData(ch, ch_len);
+}
+
+int PyUTF8Str_Contains(PyObject *str, PyObject *substr) {
+    if (!PyUTF8Str_Check(substr)) {
+        PyErr_Format(PyExc_TypeError,
+                     "'in <string>' requires string as left operand, not %.100s",
+                     Py_TYPE(substr)->tp_name);
+        return -1;
+    }
+
+    // TODO: May be make fast search single character (may be only ASCII)
+
+    return find_kmp(str, substr, 0, PY_SSIZE_T_MAX) != -1;
 }
 
 static PyMethodDef utf8str_methods[] = {
@@ -904,6 +917,7 @@ static PySequenceMethods utf8str_as_sequence = {
     .sq_repeat = PyUTF8Str_Repeat,
     .sq_length = PyUTF8Str_Length,
     .sq_item = PyUTF8Str_GetItem,
+    .sq_contains = PyUTF8Str_Contains,
 };
 
 PyTypeObject PyUTF8Str_Type = {
