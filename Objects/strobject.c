@@ -1,8 +1,11 @@
 #include "Python.h"
-#include "strobject.h"
-#include "pycore_object.h"
+
 #include "pycore_bytesobject.h"   // _PyBytes_Repeat()
+#include "pycore_critical_section.h" // Py_*_CRITICAL_SECTION_SEQUENCE_FAST
 #include "pycore_modsupport.h"    // _PyArg_CheckPositional()
+#include "pycore_object.h"
+
+#include "strobject.h"
 
 
 #if (SIZEOF_SIZE_T == 8)
@@ -242,8 +245,10 @@ Py_ssize_t utf8_char_len(unsigned char ch) {
     return -1;
 }
 
-// Forward declaration
+// Forward declarations
 Py_ssize_t PyUTF8Str_Length(PyObject *self);
+PyObject * PyUTF8Str_FromData(unsigned char * s, Py_ssize_t byte_count);
+PyObject * PyUTF8Str_New(Py_ssize_t size);
 
 int utf8_make_index(PyObject * self) {
     if (_PyUTF8Str_Validate(self) < 0) {
@@ -426,6 +431,93 @@ find_kmp(PyObject* str, PyObject* substr, Py_ssize_t start, Py_ssize_t end) {
     return byteindex2codepoint(data, byte_count, start_byte + kmp_result);
 }
 
+PyObject *
+_PyUTF8Str_JoinArray(PyObject *separator, PyObject *const *items, Py_ssize_t seqlen)
+{
+    PyObject *res = NULL;
+    PyObject *sep = NULL;
+    Py_ssize_t seplen; // byte len
+
+    if (seqlen == 0) {
+        return PyUTF8Str_FromData((unsigned char *)"", 0);
+    }
+    
+    /* Set up sep and seplen */
+    // I think it is for CAPI, usually separator can't be NULL
+    if (separator == NULL) {
+        /* fall back to a blank space separator */
+        // Not sure here. 
+        sep = PyUTF8Str_FromData((unsigned char *)" ", 1);
+        if (sep == NULL)
+            goto onError;
+        seplen = 1;
+    } else {
+        if (!PyUTF8Str_Check(separator)) {
+            PyErr_Format(PyExc_TypeError,
+                        "separator: expected str instance,"
+                        " %.80s found", Py_TYPE(separator)->tp_name);
+            goto onError;
+        }
+        sep = separator;
+        seplen = PyUTF8Str_BYTE_COUNT(separator);
+        /* inc refcount to keep this code path symmetric with the
+            above case of a blank separator */
+        Py_INCREF(sep);
+    }
+
+    Py_ssize_t sz = 0;
+    for (Py_ssize_t i = 0; i < seqlen; i++) {
+        PyObject * item = items[i];
+        if (!PyUTF8Str_Check(item)) {
+            PyErr_Format(PyExc_TypeError,
+                         "sequence item %zd: expected str instance,"
+                         " %.80s found", i, Py_TYPE(item)->tp_name);
+            goto onError;
+        }
+
+        size_t add_sz = PyUTF8Str_BYTE_COUNT(item);
+        if (i != 0) {
+            add_sz += seplen;
+        }
+        if (add_sz > (size_t)(PY_SSIZE_T_MAX - sz)) {
+            PyErr_SetString(PyExc_OverflowError,
+                            "join() result is too long for a Python string");
+            goto onError;
+        }
+        sz += add_sz;
+    }
+
+    res = PyUTF8Str_New(sz);
+    if (res == NULL) {
+        goto onError;
+    }
+
+    uint8_t *res_data = (uint8_t *)PyUTF8Str_DATA(res);
+    uint8_t *sep_data = (uint8_t *)PyUTF8Str_DATA(sep);
+
+    for (Py_ssize_t i = 0; i < seqlen; i++) {
+        PyObject * item = items[i];
+
+        if (i != 0 && seplen != 0) {
+            memcpy(res_data, sep_data, seplen);
+            res_data += seplen;
+        }
+
+        Py_ssize_t item_len = PyUTF8Str_BYTE_COUNT(item);
+        if (item_len != 0) {
+            memcpy(res_data, PyUTF8Str_DATA(item), item_len);
+            res_data += item_len;
+        }
+    }
+    assert(res_data == (uint8_t *)PyUTF8Str_DATA(res) + PyUTF8Str_BYTE_COUNT(res));
+    Py_XDECREF(sep);
+    return res;
+
+onError:
+    Py_XDECREF(sep);
+    Py_XDECREF(res);
+    return NULL;
+}
 
 PyObject * PyUTF8Str_New(Py_ssize_t size)
 {
@@ -474,8 +566,7 @@ PyObject * PyUTF8Str_New(Py_ssize_t size)
     return obj;
 }
 
-static PyObject *
-PyUTF8Str_FromData(unsigned char * s, Py_ssize_t byte_count) {
+PyObject * PyUTF8Str_FromData(unsigned char * s, Py_ssize_t byte_count) {
     PyObject *self = PyUTF8Str_New(byte_count);
     if (!self)
         return NULL;
@@ -657,6 +748,43 @@ exit:
     return return_value;
 }
 
+PyDoc_STRVAR(utf8str_join__doc__,
+"join($self, iterable, /)\n"
+"--\n"
+"\n"
+"Concatenate any number of strings.\n"
+"\n"
+"The string whose method is called is inserted in between each given string.\n"
+"The result is returned as a new string.\n"
+"\n"
+"Example: \'.\'.join([\'ab\', \'pq\', \'rs\']) -> \'ab.pq.rs\'");
+
+PyObject *
+PyUTF8Str_Join(PyObject *separator, PyObject *seq)
+{
+    PyObject *res;
+    PyObject *fseq;
+    Py_ssize_t seqlen;
+    PyObject **items;
+
+    fseq = PySequence_Fast(seq, "can only join an iterable");
+    if (fseq == NULL) {
+        return NULL;
+    }
+
+    // I don't fully understand it yet
+    Py_BEGIN_CRITICAL_SECTION_SEQUENCE_FAST(seq);
+
+    items = PySequence_Fast_ITEMS(fseq);
+    seqlen = PySequence_Fast_GET_SIZE(fseq);
+    res = _PyUTF8Str_JoinArray(separator, items, seqlen);
+
+    Py_END_CRITICAL_SECTION_SEQUENCE_FAST();
+
+    Py_DECREF(fseq);
+    return res;
+}
+
 PyObject *
 PyUTF8Str_Concat(PyObject *left, PyObject *right)
 {
@@ -767,6 +895,7 @@ PyUTF8Str_GetItem(PyObject *self, Py_ssize_t index)
 static PyMethodDef utf8str_methods[] = {
     {"find", _PyCFunction_CAST(utf8str_find), METH_FASTCALL, unicode_find__doc__},
     {"isascii", _PyCFunction_CAST(utf8str_isascii), METH_NOARGS, utf8str_isascii__doc__},
+    {"join", (PyCFunction)PyUTF8Str_Join, METH_O, utf8str_join__doc__},
     {NULL, NULL}
 };
 
