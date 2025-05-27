@@ -1,5 +1,6 @@
 #include "Python.h"
 
+#include "pycore_abstract.h"      // _PyIndex_Check()
 #include "pycore_bytesobject.h"   // _PyBytes_Repeat()
 #include "pycore_critical_section.h" // Py_*_CRITICAL_SECTION_SEQUENCE_FAST
 #include "pycore_modsupport.h"    // _PyArg_CheckPositional()
@@ -248,6 +249,7 @@ Py_ssize_t utf8_char_len(unsigned char ch) {
 // Forward declarations
 Py_ssize_t PyUTF8Str_Length(PyObject *self);
 PyObject * PyUTF8Str_FromData(unsigned char * s, Py_ssize_t byte_count);
+PyObject * _PyUTF8Str_Empty(void);
 PyObject * PyUTF8Str_New(Py_ssize_t size);
 
 int utf8_make_index(PyObject * self) {
@@ -257,7 +259,8 @@ int utf8_make_index(PyObject * self) {
     }
     Py_ssize_t len = PyUTF8Str_Length(self);
     Py_ssize_t blocks = len / INDEX_BLOCK_SIZE + 1;
-    PyUTF8Index *index = (PyUTF8Index *)PyMem_Malloc(sizeof(PyUTF8Index) + blocks * sizeof(index_entry));
+    PyUTF8Index *index = (PyUTF8Index *)PyMem_Malloc(sizeof(PyUTF8Index) +
+                                                blocks * sizeof(index_entry));
     if (index == NULL) {
         PyErr_NoMemory();
         return -1;
@@ -439,7 +442,7 @@ _PyUTF8Str_JoinArray(PyObject *separator, PyObject *const *items, Py_ssize_t seq
     Py_ssize_t seplen; // byte len
 
     if (seqlen == 0) {
-        return PyUTF8Str_FromData((unsigned char *)"", 0);
+        return _PyUTF8Str_Empty();
     }
 
     /* Set up sep and seplen */
@@ -580,6 +583,49 @@ PyObject * PyUTF8Str_FromData(unsigned char * s, Py_ssize_t byte_count) {
     //     return NULL;
     // }
     return self;
+}
+
+PyObject * _PyUTF8Str_Empty() {
+    return PyUTF8Str_FromData((unsigned char *)"", 0);
+}
+
+PyObject* utf8_result_unchanged(PyObject *str)
+{
+    assert(PyUTF8Str_Check(str));
+    return Py_NewRef(str);
+    // if (PyUnicode_CheckExact(unicode)) {
+    //     return Py_NewRef(unicode);
+    // }
+    // else
+    //     /* Subtype -- return genuine unicode string with the same value. */
+    //     return _PyUnicode_Copy(unicode);
+}
+
+PyObject*
+PyUTF8Str_Substring(PyObject *self, Py_ssize_t start, Py_ssize_t end)
+{
+    Py_ssize_t length = PyUTF8Str_Length(self);
+    end = Py_MIN(end, length);
+
+    if (start == 0 && end == length)
+        return utf8_result_unchanged(self);
+
+    if (start < 0 || end < 0) {
+        PyErr_SetString(PyExc_IndexError, "string index out of range");
+        return NULL;
+    }
+
+    if (start >= length || end < start)
+        return _PyUTF8Str_Empty();
+
+    Py_ssize_t start_byte = 0;
+    Py_ssize_t end_byte = PyUTF8Str_BYTE_COUNT(self);
+    if (start != 0 || end != length) {
+        start_byte = utf8_index2byte(self, start);
+        end_byte = utf8_index2byte(self, end);
+    }
+    unsigned char * data = (unsigned char *)PyUTF8Str_DATA(self);
+    return PyUTF8Str_FromData(data + start_byte, end_byte - start_byte);
 }
 
 static PyObject *
@@ -832,7 +878,7 @@ PyUTF8Str_Repeat(PyObject *str, Py_ssize_t n)
     Py_ssize_t len, new_len;
 
     if (n < 1)
-        return PyUTF8Str_New(0);
+        return _PyUTF8Str_Empty();
 
     /* no repeat, return original string */
     if (n == 1)
@@ -892,6 +938,59 @@ PyUTF8Str_GetItem(PyObject *self, Py_ssize_t index)
     return PyUTF8Str_FromData(ch, ch_len);
 }
 
+static PyObject*
+utf8str_subscript(PyObject* self, PyObject* item)
+{
+    if (_PyIndex_Check(item)) {
+        Py_ssize_t i = PyNumber_AsSsize_t(item, PyExc_IndexError);
+        if (i == -1 && PyErr_Occurred())
+            return NULL;
+        if (i < 0)
+            i += PyUTF8Str_Length(self);
+        return PyUTF8Str_GetItem(self, i);
+    } else if (PySlice_Check(item)) {
+        Py_ssize_t start, stop, step;
+        if (PySlice_Unpack(item, &start, &stop, &step) < 0) {
+            return NULL;
+        }
+        Py_ssize_t len = PyUTF8Str_Length(self);
+        Py_ssize_t slicelength = PySlice_AdjustIndices(len, &start, &stop, step);
+
+        if (slicelength <= 0) {
+            return _PyUTF8Str_Empty();
+        } else if (start == 0 && step == 1 && slicelength == len) {
+            return utf8_result_unchanged(self);
+        } else if (step == 1) {
+            return PyUTF8Str_Substring(self, start, start + slicelength);
+        }
+
+        /* General case */
+        unsigned char * data = (unsigned char *)PyUTF8Str_DATA(self);
+        Py_ssize_t sz = 0;
+        for (Py_ssize_t i = 0, cur = start; i < slicelength; i++, cur += step) {
+            Py_ssize_t byte_index = utf8_index2byte(self, cur);
+            sz += utf8_char_len(data[byte_index]);
+        }
+
+        PyObject *result = PyUTF8Str_New(sz);
+        if (result == NULL)
+            return NULL;
+        unsigned char * res_data = (unsigned char *)PyUTF8Str_DATA(result);
+        for (Py_ssize_t i = 0, cur = start; i < slicelength; i++, cur += step) {
+            Py_ssize_t byte_index = utf8_index2byte(self, cur);
+            Py_ssize_t ch_len = utf8_char_len(data[byte_index]);
+            memcpy(res_data, data + byte_index, ch_len);
+            res_data += ch_len;
+        }
+
+        return result;
+    } else {
+        PyErr_Format(PyExc_TypeError, "string indices must be integers, not '%.200s'",
+                     Py_TYPE(item)->tp_name);
+        return NULL;
+    }
+}
+
 int PyUTF8Str_Contains(PyObject *str, PyObject *substr) {
     if (!PyUTF8Str_Check(substr)) {
         PyErr_Format(PyExc_TypeError,
@@ -920,6 +1019,11 @@ static PySequenceMethods utf8str_as_sequence = {
     .sq_contains = PyUTF8Str_Contains,
 };
 
+static PyMappingMethods utf8str_as_mapping = {
+    .mp_length = PyUTF8Str_Length,
+    .mp_subscript = utf8str_subscript,
+};
+
 PyTypeObject PyUTF8Str_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
     .tp_name = "_str",
@@ -933,5 +1037,6 @@ PyTypeObject PyUTF8Str_Type = {
     .tp_richcompare = PyUTF8Str_RichCompare,
     .tp_hash = utf8str_hash,
     .tp_as_sequence = &utf8str_as_sequence,
+    .tp_as_mapping = &utf8str_as_mapping,
     .tp_methods = utf8str_methods,
 };

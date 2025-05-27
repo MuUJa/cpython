@@ -100,6 +100,8 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
         self.addCleanup(codecs.unregister, search_function)
 
     def checkequalnofix(self, result, object, methodname, *args):
+        methodname = str(methodname)
+        # ^^^ dirty fix _str
         method = getattr(object, methodname)
         realresult = method(*args)
         self.assertEqual(realresult, result)
@@ -148,7 +150,7 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
             )
         testrepr = ascii(str_type('').join(map(chr, range(256))))
         self.assertEqual(testrepr, latin1repr)
-        self.assertEqual(ascii(str_type('𐀀') * 39 + str_type('\uffff') * 
+        self.assertEqual(ascii(str_type('𐀀') * 39 + str_type('\uffff') *
             4096), ascii(str_type('𐀀') * 39 + str_type('\uffff') * 4096))
         self.assertTypedEqual(ascii(str_type('🐍')), str_type("'\\U0001f40d'"))
         self.assertTypedEqual(ascii(StrSubclass(str_type('abc'))), str_type
@@ -182,7 +184,7 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
             )
         testrepr = repr(str_type('').join(map(chr, range(256))))
         self.assertEqual(testrepr, latin1repr)
-        self.assertEqual(repr(str_type('𐀀') * 39 + str_type('\uffff') * 
+        self.assertEqual(repr(str_type('𐀀') * 39 + str_type('\uffff') *
             4096), repr(str_type('𐀀') * 39 + str_type('\uffff') * 4096))
         self.assertTypedEqual(repr(str_type('🐍')), str_type("'🐍'"))
         self.assertTypedEqual(repr(StrSubclass(str_type('abc'))), str_type(
@@ -1349,11 +1351,11 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
             str_type('00result'))
         self.assertEqual(str_type('{0:^08s}').format(str_type('result')),
             str_type('0result0'))
-        self.assertEqual(str_type('{0:10000}').format(str_type('a')), 
+        self.assertEqual(str_type('{0:10000}').format(str_type('a')),
             str_type('a') + str_type(' ') * 9999)
-        self.assertEqual(str_type('{0:10000}').format(str_type('')), 
+        self.assertEqual(str_type('{0:10000}').format(str_type('')),
             str_type(' ') * 10000)
-        self.assertEqual(str_type('{0:10000000}').format(str_type('')), 
+        self.assertEqual(str_type('{0:10000000}').format(str_type('')),
             str_type(' ') * 10000000)
         self.assertEqual(str_type('{0:\x00<6s}').format(str_type('foo')),
             str_type('foo\x00\x00\x00'))
@@ -2037,7 +2039,7 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
             str_type('surrogatepass')), b'\xed\xa0\x80')
         self.assertEqual(str_type('\udc00').encode(str_type('utf-8'),
             str_type('surrogatepass')), b'\xed\xb0\x80')
-        self.assertEqual((str_type('𐀂') * 10).encode(str_type('utf-8')), 
+        self.assertEqual((str_type('𐀂') * 10).encode(str_type('utf-8')),
             b'\xf0\x90\x80\x82' * 10)
         self.assertEqual(str_type(
             '正確に言うと翻訳はされていません。一部はドイツ語ですが、あとはでたらめです。実際には「Wenn ist das Nunstuck git und'
@@ -2109,7 +2111,7 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
     def test_issue8271(self):
         FFFD = str_type('�')
         sequences = [(b'\x80', FFFD), (b'\x80\x80', FFFD * 2), (b'\xc0',
-            FFFD), (b'\xc0\xc0', FFFD * 2), (b'\xc1', FFFD), (b'\xc1\xc0', 
+            FFFD), (b'\xc0\xc0', FFFD * 2), (b'\xc1', FFFD), (b'\xc1\xc0',
             FFFD * 2), (b'\xc0\xc1', FFFD * 2), (b'\xc2', FFFD), (
             b'\xc2\xc2', FFFD * 2), (b'\xc2\xc2\xc2', FFFD * 3), (b'\xc2A',
             FFFD + str_type('A')), (b'\xe1', FFFD), (b'\xe1\xe1', FFFD * 2),
@@ -2118,8 +2120,8 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
             b'\xe1A\x80', FFFD + str_type('A') + FFFD), (b'\xe1AA', FFFD +
             str_type('AA')), (b'\xe1\x80A', FFFD + str_type('A')), (
             b'\xe1\x80\xe1A', FFFD * 2 + str_type('A')), (b'\xe1A\xe1\x80',
-            FFFD + str_type('A') + FFFD), (b'\xf1', FFFD), (b'\xf1\xf1', 
-            FFFD * 2), (b'\xf1\xf1\xf1', FFFD * 3), (b'\xf1\xf1\xf1\xf1', 
+            FFFD + str_type('A') + FFFD), (b'\xf1', FFFD), (b'\xf1\xf1',
+            FFFD * 2), (b'\xf1\xf1\xf1', FFFD * 3), (b'\xf1\xf1\xf1\xf1',
             FFFD * 4), (b'\xf1\xf1\xf1\xf1\xf1', FFFD * 5), (b'\xf1\x80',
             FFFD), (b'\xf1\x80\x80', FFFD), (b'\xf1\x80A', FFFD + str_type(
             'A')), (b'\xf1\x80AA', FFFD + str_type('AA')), (
@@ -2271,7 +2273,7 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
         sequences = [(str_type('E0 00'), FFFD + str_type('\x00')), (
             str_type('E0 7F'), FFFD + str_type('\x7f')), (str_type('E0 80'),
             FFFDx2), (str_type('E0 9F'), FFFDx2), (str_type('E0 C0'),
-            FFFDx2), (str_type('E0 FF'), FFFDx2), (str_type('E0 A0 00'), 
+            FFFDx2), (str_type('E0 FF'), FFFDx2), (str_type('E0 A0 00'),
             FFFD + str_type('\x00')), (str_type('E0 A0 7F'), FFFD +
             str_type('\x7f')), (str_type('E0 A0 C0'), FFFDx2), (str_type(
             'E0 A0 FF'), FFFDx2), (str_type('E0 BF 00'), FFFD + str_type(
@@ -2292,14 +2294,14 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
             str_type('EC 80 C0'), FFFDx2), (str_type('EC 80 FF'), FFFDx2),
             (str_type('EC BF 00'), FFFD + str_type('\x00')), (str_type(
             'EC BF 7F'), FFFD + str_type('\x7f')), (str_type('EC BF C0'),
-            FFFDx2), (str_type('EC BF FF'), FFFDx2), (str_type('ED 00'), 
+            FFFDx2), (str_type('EC BF FF'), FFFDx2), (str_type('ED 00'),
             FFFD + str_type('\x00')), (str_type('ED 7F'), FFFD + str_type(
             '\x7f')), (str_type('ED A0'), FFFDx2), (str_type('ED BF'),
             FFFDx2), (str_type('ED C0'), FFFDx2), (str_type('ED FF'),
             FFFDx2), (str_type('ED 80 00'), FFFD + str_type('\x00')), (
             str_type('ED 80 7F'), FFFD + str_type('\x7f')), (str_type(
             'ED 80 C0'), FFFDx2), (str_type('ED 80 FF'), FFFDx2), (str_type
-            ('ED 9F 00'), FFFD + str_type('\x00')), (str_type('ED 9F 7F'), 
+            ('ED 9F 00'), FFFD + str_type('\x00')), (str_type('ED 9F 7F'),
             FFFD + str_type('\x7f')), (str_type('ED 9F C0'), FFFDx2), (
             str_type('ED 9F FF'), FFFDx2), (str_type('EE 00'), FFFD +
             str_type('\x00')), (str_type('EE 7F'), FFFD + str_type('\x7f')),
@@ -2345,7 +2347,7 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
         sequences = [(str_type('F0 00'), FFFD + str_type('\x00')), (
             str_type('F0 7F'), FFFD + str_type('\x7f')), (str_type('F0 80'),
             FFFDx2), (str_type('F0 8F'), FFFDx2), (str_type('F0 C0'),
-            FFFDx2), (str_type('F0 FF'), FFFDx2), (str_type('F0 90 00'), 
+            FFFDx2), (str_type('F0 FF'), FFFDx2), (str_type('F0 90 00'),
             FFFD + str_type('\x00')), (str_type('F0 90 7F'), FFFD +
             str_type('\x7f')), (str_type('F0 90 C0'), FFFDx2), (str_type(
             'F0 90 FF'), FFFDx2), (str_type('F0 BF 00'), FFFD + str_type(
@@ -2670,7 +2672,7 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
             alloc = lambda : char * maxlen
             with self.subTest(char=char, struct_size=struct_size, char_size
                 =char_size):
-                self.assertEqual(sys.getsizeof(char * 42), struct_size + 
+                self.assertEqual(sys.getsizeof(char * 42), struct_size +
                     char_size * (42 + 1))
                 self.assertRaises(MemoryError, alloc)
                 self.assertRaises(MemoryError, alloc)

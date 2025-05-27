@@ -569,7 +569,7 @@ class BaseTest:
             'a|b|c|d'), str_type('split'), maxsplit=1, sep=str_type('|'))
         self.checkequal([str_type('a'), str_type('b c d')], str_type(
             'a b c d'), str_type('split'), maxsplit=1)
-        self.checkraises(TypeError, str_type('hello'), str_type('split'), 
+        self.checkraises(TypeError, str_type('hello'), str_type('split'),
             42, 42, 42)
         self.checkraises(ValueError, str_type('hello'), str_type('split'),
             str_type(''))
@@ -687,7 +687,7 @@ class BaseTest:
             'a|b|c|d'), str_type('rsplit'), maxsplit=1, sep=str_type('|'))
         self.checkequal([str_type('a b c'), str_type('d')], str_type(
             'a b c d'), str_type('rsplit'), maxsplit=1)
-        self.checkraises(TypeError, str_type('hello'), str_type('rsplit'), 
+        self.checkraises(TypeError, str_type('hello'), str_type('rsplit'),
             42, 42, 42)
         self.checkraises(ValueError, str_type('hello'), str_type('rsplit'),
             str_type(''))
@@ -1091,7 +1091,7 @@ class BaseTest:
         self.checkequal([str_type('a'), str_type('b'), str_type('c'),
             str_type('d')], str_type('a b c d'), str_type('split'), None, 4)
         self.checkequal([str_type('a'), str_type('b'), str_type('c'),
-            str_type('d')], str_type('a b c d'), str_type('split'), None, 
+            str_type('d')], str_type('a b c d'), str_type('split'), None,
             sys.maxsize - 1)
         self.checkequal([str_type('a b c d')], str_type('a b c d'),
             str_type('split'), None, 0)
@@ -1146,7 +1146,7 @@ class BaseTest:
         self.checkequal([str_type('a'), str_type('b'), str_type('c'),
             str_type('d')], str_type('a b c d'), str_type('rsplit'), None, 4)
         self.checkequal([str_type('a'), str_type('b'), str_type('c'),
-            str_type('d')], str_type('a b c d'), str_type('rsplit'), None, 
+            str_type('d')], str_type('a b c d'), str_type('rsplit'), None,
             sys.maxsize - 20)
         self.checkequal([str_type('a b c d')], str_type('a b c d'),
             str_type('rsplit'), None, 0)
@@ -1221,11 +1221,11 @@ class BaseTest:
             'strip'), str_type('mississippi'))
         self.checkequal(str_type('mississipp'), str_type('mississippi'),
             str_type('strip'), str_type('i'))
-        self.checkraises(TypeError, str_type('hello'), str_type('strip'), 
+        self.checkraises(TypeError, str_type('hello'), str_type('strip'),
             42, 42)
-        self.checkraises(TypeError, str_type('hello'), str_type('lstrip'), 
+        self.checkraises(TypeError, str_type('hello'), str_type('lstrip'),
             42, 42)
-        self.checkraises(TypeError, str_type('hello'), str_type('rstrip'), 
+        self.checkraises(TypeError, str_type('hello'), str_type('rstrip'),
             42, 42)
 
     def test_ljust(self):
@@ -1375,9 +1375,9 @@ class BaseTest:
                 str_type('isascii'))
             self.checkequal(False, str_type(' ') * p + str_type('\x80'),
                 str_type('isascii'))
-            self.checkequal(True, str_type(' ') * p + str_type('\x7f') + 
+            self.checkequal(True, str_type(' ') * p + str_type('\x7f') +
                 str_type(' ') * 8, str_type('isascii'))
-            self.checkequal(False, str_type(' ') * p + str_type('\x80') + 
+            self.checkequal(False, str_type(' ') * p + str_type('\x80') +
                 str_type(' ') * 8, str_type('isascii'))
 
     def test_isdigit(self):
