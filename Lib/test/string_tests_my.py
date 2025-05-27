@@ -70,7 +70,9 @@ class BaseTest:
         args = self.fixtype(args)
         with self.assertRaises(exc) as cm:
             getattr(obj, methodname)(*args)
-        self.assertNotEqual(str_type(cm.exception), str_type(''))
+        # TODO: fix _str(cm.exception) Unsupported argument type
+        # self.assertNotEqual(str_type(cm.exception), str_type(''))
+        self.assertNotEqual(str_type(str(cm.exception)), str_type(''))
         if expected_msg is not None:
             self.assertEqual(str_type(cm.exception), expected_msg)
 

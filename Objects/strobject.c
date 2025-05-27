@@ -20,6 +20,26 @@
 # error C 'size_t' size should be either 4 or 8!
 #endif
 
+/* helper macro to fixup start/end slice values */
+#define ADJUST_INDICES(start, end, len) \
+    do {                                \
+        if (end > len) {                \
+            end = len;                  \
+        }                               \
+        else if (end < 0) {             \
+            end += len;                 \
+            if (end < 0) {              \
+                end = 0;                \
+            }                           \
+        }                               \
+        if (start < 0) {                \
+            start += len;               \
+            if (start < 0) {            \
+                start = 0;              \
+            }                           \
+        }                               \
+    } while (0)
+
 // StringZilla like
 int export_string_like(PyObject *object, const char **data, Py_ssize_t *byte_count) {
     if (PyUnicode_Check(object)) {
@@ -350,7 +370,8 @@ void prefix_function(const unsigned char *s, Py_ssize_t *p, Py_ssize_t len) {
 
 // Template must be valid (0xff is used as a separator)
 // Or think about how to separate these strings in another way
-Py_ssize_t knuth_morris_pratt(const unsigned char *text, Py_ssize_t text_len, const unsigned char *template, Py_ssize_t template_len) {
+Py_ssize_t knuth_morris_pratt(const unsigned char *text, Py_ssize_t text_len, 
+                        const unsigned char *template, Py_ssize_t template_len) {
     Py_ssize_t len = text_len + template_len + 1;
     unsigned char *s = PyMem_Malloc(len + 1);
     memcpy(s, template, template_len);
@@ -361,9 +382,9 @@ Py_ssize_t knuth_morris_pratt(const unsigned char *text, Py_ssize_t text_len, co
     Py_ssize_t *pfunc = PyMem_Calloc(len, SIZEOF_SIZE_T);
     prefix_function(s, pfunc, len);
     Py_ssize_t result = -1;
-    for (int i = 0; i < text_len; i++) {
-        if (pfunc[i + template_len + 1] == template_len) {
-            result = i - (template_len - 1);
+    for (int i = template_len; i < len; i++) {
+        if (pfunc[i] == template_len) {
+            result = i - 2 * template_len; // i - (n + 1) - n + 1
             break;
         }
     }
@@ -373,18 +394,36 @@ Py_ssize_t knuth_morris_pratt(const unsigned char *text, Py_ssize_t text_len, co
 }
 
 Py_ssize_t byteindex2codepoint(unsigned char *s, Py_ssize_t len, Py_ssize_t index) {
-    assert(index < len);
+    // TODO: If index != NULL, binary search
+    assert(index <= len);
     return utf8_count_codepoints(s, s + index);
 }
 
 static Py_ssize_t
-find_kmp(PyObject* str, PyObject* substr) {
+find_kmp(PyObject* str, PyObject* substr, Py_ssize_t start, Py_ssize_t end) {
+    Py_ssize_t len = PyUTF8Str_Length(str);
+    ADJUST_INDICES(start, end, len);
+    if (end - start < 0)
+        return -1;
+
+    Py_ssize_t start_byte = 0;
+    Py_ssize_t end_byte = PyUTF8Str_BYTE_COUNT(str);
+    if (start != 0 || end != len) {
+        start_byte = utf8_index2byte(str, start);
+        end_byte = utf8_index2byte(str, end);
+    }
+    Py_ssize_t substr_byte_count = PyUTF8Str_BYTE_COUNT(substr);
+    if (end_byte - start_byte < substr_byte_count) {
+        return -1;
+    }
+
     unsigned char *data = (unsigned char *)PyUTF8Str_DATA(str);
-    Py_ssize_t len = PyUTF8Str_BYTE_COUNT(str);
-    Py_ssize_t kmp_result = knuth_morris_pratt(data, len, (unsigned char *)PyUTF8Str_DATA(substr), PyUTF8Str_BYTE_COUNT(substr));
+    Py_ssize_t byte_count = PyUTF8Str_BYTE_COUNT(str);
+    Py_ssize_t kmp_result = knuth_morris_pratt(data + start_byte, end_byte - start_byte, 
+                            (unsigned char *)PyUTF8Str_DATA(substr), substr_byte_count);
     if (kmp_result == -1) 
         return -1;
-    return byteindex2codepoint(data, len, kmp_result);
+    return byteindex2codepoint(data, byte_count, start_byte + kmp_result);
 }
 
 
@@ -608,9 +647,7 @@ utf8str_find(PyObject *str, PyObject *const *args, Py_ssize_t nargs)
         goto exit;
     }
 skip_optional:
-    // TODO: not ignore slice
-    // _return_value = find_kmp(str, substr, start, end);
-    _return_value = find_kmp(str, substr);
+    _return_value = find_kmp(str, substr, start, end);
     if ((_return_value == -1) && PyErr_Occurred()) {
         goto exit;
     }
