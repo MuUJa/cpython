@@ -589,16 +589,24 @@ PyObject * _PyUTF8Str_Empty() {
     return PyUTF8Str_FromData((unsigned char *)"", 0);
 }
 
+PyObject *_PyUTF8Str_Copy(PyObject * str) {
+    if (!PyUTF8Str_Check(str)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+
+    return PyUTF8Str_FromData((unsigned char *)PyUTF8Str_DATA(str),
+                              PyUTF8Str_BYTE_COUNT(str));
+}
+
 PyObject* utf8_result_unchanged(PyObject *str)
 {
-    assert(PyUTF8Str_Check(str));
-    return Py_NewRef(str);
-    // if (PyUnicode_CheckExact(unicode)) {
-    //     return Py_NewRef(unicode);
-    // }
-    // else
-    //     /* Subtype -- return genuine unicode string with the same value. */
-    //     return _PyUnicode_Copy(unicode);
+    if (PyUTF8Str_CheckExact(str)) {
+        return Py_NewRef(str);
+    }
+    else
+        /* Subtype -- return genuine unicode string with the same value. */
+        return _PyUTF8Str_Copy(str);
 }
 
 PyObject*
@@ -629,9 +637,56 @@ PyUTF8Str_Substring(PyObject *self, Py_ssize_t start, Py_ssize_t end)
 }
 
 static PyObject *
-utf8str_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+utf8str_subtype_new(PyTypeObject *type, PyObject *str)
 {
-    // TODO: change, may be _PyArg_Parser
+    assert(PyType_IsSubtype(type, &PyUTF8Str_Type));
+    PyObject *self = type->tp_alloc(type, 0);
+    Py_ssize_t byte_count = PyUTF8Str_BYTE_COUNT(str);
+    char * data = PyMem_Malloc(byte_count);
+    if (data == NULL) {
+        PyErr_NoMemory();
+        Py_DECREF(self);
+        return NULL;
+    }
+    memcpy(data, PyUTF8Str_DATA(str), byte_count + 1);
+
+    _PyUTF8StrObject_CAST(self)->data = data;
+    _PyUTF8StrObject_CAST(self)->byte_count = byte_count;
+    _PyUTF8StrObject_CAST(self)->ascii = _PyUTF8StrObject_CAST(str)->ascii;
+    _PyUTF8StrObject_CAST(self)->valid_utf8 =
+        _PyUTF8StrObject_CAST(str)->valid_utf8;
+
+    return self;
+}
+
+static PyObject *
+utf8str_new_impl(PyTypeObject *type, PyObject *x)
+{
+    PyObject *str;
+    if (x == NULL) {
+        str = _PyUTF8Str_Empty();
+    } else {
+        // TODO: like original. Where PyObject_Str calls __str__ methods
+        // unicode = PyObject_Str(x);
+        const char *data;
+        Py_ssize_t byte_count;
+        if (!export_string_like(x, &data, &byte_count)) {
+            return NULL;
+        }
+        str = PyUTF8Str_FromData((unsigned char *)data, byte_count);
+    }
+
+    if (str != NULL && type != &PyUTF8Str_Type) {
+        Py_SETREF(str, utf8str_subtype_new(type, str));
+    }
+    return str;
+}
+
+static PyObject *
+utf8str_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
+{
+    // TODO: change, may be _PyArg_Parser or _PyArg_UnpackKeywords.
+    // Add encoding and errors args if understand how to use them
     Py_ssize_t nargs = PyTuple_Size(args);
     if (nargs > 1) {
         PyErr_SetString(PyExc_TypeError, "Invalid number of arguments");
@@ -639,16 +694,7 @@ utf8str_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     }
     PyObject *s = nargs >= 1 ? PyTuple_GET_ITEM(args, 0) : NULL;
 
-    const char *data;
-    Py_ssize_t byte_count;
-    if (s == NULL) {
-        data = NULL;
-        byte_count = 0;
-    } else if (!export_string_like(s, &data, &byte_count)) {
-        return NULL;
-    }
-
-    return PyUTF8Str_FromData((unsigned char *)data, byte_count);
+    return utf8str_new_impl(type, s);
 }
 
 static void

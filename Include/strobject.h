@@ -9,9 +9,9 @@ extern "C" {
 
 #define WORD_SIZE (sizeof(uintptr_t) * 8)
 
-// This works because the UTF-8 encoding of a code point is at most 4 bytes, 
+// This works because the UTF-8 encoding of a code point is at most 4 bytes,
 // so the largest value one can need to store in additional_offsets is at most 63 * 4,
-// which fits in a uint8_t. Effectively it's a lightweight compression scheme 
+// which fits in a uint8_t. Effectively it's a lightweight compression scheme
 // on having just an array of all the offsets.
 #define INDEX_BLOCK_SIZE 64
 
@@ -39,6 +39,7 @@ typedef struct {
 extern PyTypeObject PyUTF8Str_Type;
 
 #define PyUTF8Str_Check(op) PyObject_TypeCheck(op, &PyUTF8Str_Type)
+#define PyUTF8Str_CheckExact(op) Py_IS_TYPE((op), &PyUTF8Str_Type)
 
 #define _PyUTF8StrObject_CAST(op) \
     (assert(PyUTF8Str_Check(op)), \

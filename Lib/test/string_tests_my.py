@@ -66,6 +66,8 @@ class BaseTest:
                 self.assertIsNot(obj, realresult)
 
     def checkraises(self, exc, obj, methodname, *args, expected_msg=None):
+        methodname = str(methodname)
+        # ^^^ dirty fix _str
         obj = self.fixtype(obj)
         args = self.fixtype(args)
         with self.assertRaises(exc) as cm:
@@ -74,7 +76,7 @@ class BaseTest:
         # self.assertNotEqual(str_type(cm.exception), str_type(''))
         self.assertNotEqual(str_type(str(cm.exception)), str_type(''))
         if expected_msg is not None:
-            self.assertEqual(str_type(cm.exception), expected_msg)
+            self.assertEqual(str_type(str(cm.exception)), expected_msg)
 
     def checkcall(self, obj, methodname, *args):
         obj = self.fixtype(obj)
