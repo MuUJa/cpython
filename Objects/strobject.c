@@ -376,39 +376,100 @@ void prefix_function(const unsigned char *s, Py_ssize_t *p, Py_ssize_t len) {
     }
 }
 
-// Template must be valid (0xff is used as a separator)
-// Or think about how to separate these strings in another way
-Py_ssize_t knuth_morris_pratt(const unsigned char *text, Py_ssize_t text_len,
-                        const unsigned char *template, Py_ssize_t template_len) {
+#define FIND_MODE 0
+#define RFIND_MODE 1
+#define COUNT_MODE 2
+#define GET_ALL_MODE 3
+/* Template must be valid (0xff is used as a separator)
+   Or think about how to separate these strings in another way */
+/* mode 0-2: return find result. find_indexes is unused
+   mode 3: return len of the find. find_indexes is result, must be free after */
+Py_ssize_t _knuth_morris_pratt(const unsigned char *text, Py_ssize_t text_len,
+                        const unsigned char *template, Py_ssize_t template_len,
+                        int mode, Py_ssize_t **find_indexes) {
+    assert(0 <= mode && mode <= 3);
+
     Py_ssize_t len = text_len + template_len + 1;
     unsigned char *s = PyMem_Malloc(len + 1);
+    if (s == NULL) {
+        PyErr_NoMemory();
+        return -1;
+    }
     memcpy(s, template, template_len);
     s[template_len] = 0xff;
     memcpy(s + template_len + 1, text, text_len);
     s[len] = 0;
 
     Py_ssize_t *pfunc = PyMem_Calloc(len, SIZEOF_SIZE_T);
+    if (pfunc == NULL) {
+        PyErr_NoMemory();
+        PyMem_Free((void *)s);
+        return -1;
+    }
     prefix_function(s, pfunc, len);
+
+
     Py_ssize_t result = -1;
-    for (int i = template_len; i < len; i++) {
-        if (pfunc[i] == template_len) {
-            result = i - 2 * template_len; // i - (n + 1) - n + 1
-            break;
+    if (mode == 0) {
+        for (int i = template_len; i < len; i++) {
+            if (pfunc[i] == template_len) {
+                result = i - 2 * template_len; // i - (n + 1) - n + 1
+                break;
+            }
+        }
+    } else if (mode == 1) {
+        for (int i = len - 1; i >= template_len; i--) {
+            if (pfunc[i] == template_len) {
+                result = i - 2 * template_len; // i - (n + 1) - n + 1
+                break;
+            }
+        }
+    } else if (mode == 2 || mode == 3) {
+        result = 0;
+        for (int i = template_len; i < len; i++) {
+            if (pfunc[i] == template_len) {
+                result++;
+                i += Py_MAX(1, template_len) - 1;
+            }
         }
     }
+
+    if (mode == 3) {
+        assert(find_indexes != NULL);
+        *find_indexes = PyMem_Calloc(result, SIZEOF_SIZE_T);
+        if (*find_indexes == NULL) {
+            PyErr_NoMemory();
+            PyMem_Free(s);
+            PyMem_Free(pfunc);
+            return -1;
+        }
+
+        int j = 0;
+        for (int i = template_len; i < len; i++) {
+            if (pfunc[i] == template_len) {
+                i += Py_MAX(1, template_len) - 1;
+                *find_indexes[j++] = i - 2 * template_len; // i - (n + 1) - n + 1
+            }
+        }
+    }
+
     PyMem_Free((void *)s);
     PyMem_Free((void *)pfunc);
     return result;
 }
 
 Py_ssize_t byteindex2codepoint(unsigned char *s, Py_ssize_t len, Py_ssize_t index) {
-    // TODO: If index != NULL, binary search
+    // TODO: If index != NULL (index from PyUTF8StrObject), binary search
     assert(index <= len);
     return utf8_count_codepoints(s, s + index);
 }
 
 static Py_ssize_t
-find_kmp(PyObject* str, PyObject* substr, Py_ssize_t start, Py_ssize_t end) {
+knuth_morris_pratt(PyObject* str, PyObject* substr,
+                   Py_ssize_t start, Py_ssize_t end,
+                   int mode, Py_ssize_t **find_indexes) {
+    assert(0 <= mode && mode <= 3);
+
     Py_ssize_t len = PyUTF8Str_Length(str);
     ADJUST_INDICES(start, end, len);
     if (end - start < 0)
@@ -427,11 +488,29 @@ find_kmp(PyObject* str, PyObject* substr, Py_ssize_t start, Py_ssize_t end) {
 
     unsigned char *data = (unsigned char *)PyUTF8Str_DATA(str);
     Py_ssize_t byte_count = PyUTF8Str_BYTE_COUNT(str);
-    Py_ssize_t kmp_result = knuth_morris_pratt(data + start_byte, end_byte - start_byte,
-                            (unsigned char *)PyUTF8Str_DATA(substr), substr_byte_count);
+    Py_ssize_t kmp_result = _knuth_morris_pratt(data + start_byte, end_byte - start_byte,
+                            (unsigned char *)PyUTF8Str_DATA(substr), substr_byte_count,
+                            mode, find_indexes);
     if (kmp_result == -1)
         return -1;
-    return byteindex2codepoint(data, byte_count, start_byte + kmp_result);
+    if (mode == FIND_MODE || mode == RFIND_MODE) {
+        return byteindex2codepoint(data, byte_count, start_byte + kmp_result);
+    } else if (mode == COUNT_MODE) {
+        return kmp_result;
+    } else if (mode == GET_ALL_MODE) {
+        for (Py_ssize_t i = 0; i < kmp_result; i++) {
+            Py_ssize_t byte_index = *find_indexes[i];
+            Py_ssize_t index = utf8_count_codepoints(data, data + byte_index);
+            *find_indexes[i] = index;
+            if (i != 0) {
+                *find_indexes[i] += *find_indexes[i - 1];
+            }
+            data += index;
+        }
+    }
+
+    Py_UNREACHABLE();
+    return -1;
 }
 
 PyObject *
@@ -830,7 +909,104 @@ utf8str_find(PyObject *str, PyObject *const *args, Py_ssize_t nargs)
         goto exit;
     }
 skip_optional:
-    _return_value = find_kmp(str, substr, start, end);
+    _return_value = knuth_morris_pratt(str, substr, start, end, FIND_MODE, NULL);
+    if ((_return_value == -1) && PyErr_Occurred()) {
+        goto exit;
+    }
+    return_value = PyLong_FromSsize_t(_return_value);
+
+exit:
+    return return_value;
+}
+
+PyDoc_STRVAR(unicode_rfind__doc__,
+"rfind($self, sub[, start[, end]], /)\n"
+"--\n"
+"\n"
+"Return the highest index in S where substring sub is found, such that sub is contained within S[start:end].\n"
+"\n"
+"Optional arguments start and end are interpreted as in slice notation.\n"
+"Return -1 on failure.");
+
+static PyObject *
+utf8str_rfind(PyObject *str, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *substr;
+    Py_ssize_t start = 0;
+    Py_ssize_t end = PY_SSIZE_T_MAX;
+    Py_ssize_t _return_value;
+
+    if (!_PyArg_CheckPositional("rfind", nargs, 1, 3)) {
+        goto exit;
+    }
+    if (!PyUTF8Str_Check(args[0])) {
+        _PyArg_BadArgument("rfind", "argument 1", "str", args[0]);
+        goto exit;
+    }
+    substr = args[0];
+    if (nargs < 2) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[1], &start)) {
+        goto exit;
+    }
+    if (nargs < 3) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[2], &end)) {
+        goto exit;
+    }
+skip_optional:
+    _return_value = knuth_morris_pratt(str, substr, start, end, RFIND_MODE, NULL);
+    if ((_return_value == -1) && PyErr_Occurred()) {
+        goto exit;
+    }
+    return_value = PyLong_FromSsize_t(_return_value);
+
+exit:
+    return return_value;
+}
+
+PyDoc_STRVAR(unicode_count__doc__,
+"count($self, sub[, start[, end]], /)\n"
+"--\n"
+"\n"
+"Return the number of non-overlapping occurrences of substring sub in string S[start:end].\n"
+"\n"
+"Optional arguments start and end are interpreted as in slice notation.");
+
+static PyObject *
+utf8str_count(PyObject *str, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *substr;
+    Py_ssize_t start = 0;
+    Py_ssize_t end = PY_SSIZE_T_MAX;
+    Py_ssize_t _return_value;
+
+    if (!_PyArg_CheckPositional("count", nargs, 1, 3)) {
+        goto exit;
+    }
+    if (!PyUTF8Str_Check(args[0])) {
+        _PyArg_BadArgument("count", "argument 1", "str", args[0]);
+        goto exit;
+    }
+    substr = args[0];
+    if (nargs < 2) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[1], &start)) {
+        goto exit;
+    }
+    if (nargs < 3) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[2], &end)) {
+        goto exit;
+    }
+skip_optional:
+    _return_value = knuth_morris_pratt(str, substr, start, end, COUNT_MODE, NULL);
     if ((_return_value == -1) && PyErr_Occurred()) {
         goto exit;
     }
@@ -1047,11 +1223,13 @@ int PyUTF8Str_Contains(PyObject *str, PyObject *substr) {
 
     // TODO: May be make fast search single character (may be only ASCII)
 
-    return find_kmp(str, substr, 0, PY_SSIZE_T_MAX) != -1;
+    return knuth_morris_pratt(str, substr, 0, PY_SSIZE_T_MAX, FIND_MODE, NULL) != -1;
 }
 
 static PyMethodDef utf8str_methods[] = {
     {"find", _PyCFunction_CAST(utf8str_find), METH_FASTCALL, unicode_find__doc__},
+    {"rfind", _PyCFunction_CAST(utf8str_rfind), METH_FASTCALL, unicode_rfind__doc__},
+    {"count", _PyCFunction_CAST(utf8str_count), METH_FASTCALL, unicode_count__doc__},
     {"isascii", _PyCFunction_CAST(utf8str_isascii), METH_NOARGS, utf8str_isascii__doc__},
     {"join", (PyCFunction)PyUTF8Str_Join, METH_O, utf8str_join__doc__},
     {NULL, NULL}
