@@ -870,7 +870,7 @@ utf8str_isascii(PyObject *self) {
     return PyBool_FromLong(PyUTF8Str_IS_ASCII(self));
 }
 
-PyDoc_STRVAR(unicode_find__doc__,
+PyDoc_STRVAR(utf8str_find__doc__,
 "find($self, sub[, start[, end]], /)\n"
 "--\n"
 "\n"
@@ -919,7 +919,7 @@ exit:
     return return_value;
 }
 
-PyDoc_STRVAR(unicode_rfind__doc__,
+PyDoc_STRVAR(utf8str_rfind__doc__,
 "rfind($self, sub[, start[, end]], /)\n"
 "--\n"
 "\n"
@@ -968,7 +968,7 @@ exit:
     return return_value;
 }
 
-PyDoc_STRVAR(unicode_count__doc__,
+PyDoc_STRVAR(utf8str_count__doc__,
 "count($self, sub[, start[, end]], /)\n"
 "--\n"
 "\n"
@@ -1008,6 +1008,112 @@ utf8str_count(PyObject *str, PyObject *const *args, Py_ssize_t nargs)
 skip_optional:
     _return_value = knuth_morris_pratt(str, substr, start, end, COUNT_MODE, NULL);
     if ((_return_value == -1) && PyErr_Occurred()) {
+        goto exit;
+    }
+    return_value = PyLong_FromSsize_t(_return_value);
+
+exit:
+    return return_value;
+}
+
+PyDoc_STRVAR(utf8str_index__doc__,
+"index($self, sub[, start[, end]], /)\n"
+"--\n"
+"\n"
+"Return the lowest index in S where substring sub is found, such that sub is contained within S[start:end].\n"
+"\n"
+"Optional arguments start and end are interpreted as in slice notation.\n"
+"Raises ValueError when the substring is not found.");
+
+static PyObject *
+utf8str_index(PyObject *str, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *substr;
+    Py_ssize_t start = 0;
+    Py_ssize_t end = PY_SSIZE_T_MAX;
+    Py_ssize_t _return_value;
+
+    if (!_PyArg_CheckPositional("index", nargs, 1, 3)) {
+        goto exit;
+    }
+    if (!PyUTF8Str_Check(args[0])) {
+        _PyArg_BadArgument("index", "argument 1", "str", args[0]);
+        goto exit;
+    }
+    substr = args[0];
+    if (nargs < 2) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[1], &start)) {
+        goto exit;
+    }
+    if (nargs < 3) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[2], &end)) {
+        goto exit;
+    }
+skip_optional:
+    _return_value = knuth_morris_pratt(str, substr, start, end, FIND_MODE, NULL);
+    if ((_return_value == -1) && PyErr_Occurred()) {
+        goto exit;
+    }
+    if (_return_value == -1) {
+        PyErr_SetString(PyExc_ValueError, "substring not found");
+        goto exit;
+    }
+    return_value = PyLong_FromSsize_t(_return_value);
+
+exit:
+    return return_value;
+}
+
+PyDoc_STRVAR(utf8str_rindex__doc__,
+"rindex($self, sub[, start[, end]], /)\n"
+"--\n"
+"\n"
+"Return the highest index in S where substring sub is found, such that sub is contained within S[start:end].\n"
+"\n"
+"Optional arguments start and end are interpreted as in slice notation.\n"
+"Raises ValueError when the substring is not found.");
+
+static PyObject *
+utf8str_rindex(PyObject *str, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *substr;
+    Py_ssize_t start = 0;
+    Py_ssize_t end = PY_SSIZE_T_MAX;
+    Py_ssize_t _return_value;
+
+    if (!_PyArg_CheckPositional("rindex", nargs, 1, 3)) {
+        goto exit;
+    }
+    if (!PyUTF8Str_Check(args[0])) {
+        _PyArg_BadArgument("rindex", "argument 1", "str", args[0]);
+        goto exit;
+    }
+    substr = args[0];
+    if (nargs < 2) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[1], &start)) {
+        goto exit;
+    }
+    if (nargs < 3) {
+        goto skip_optional;
+    }
+    if (!_PyEval_SliceIndex(args[2], &end)) {
+        goto exit;
+    }
+skip_optional:
+    _return_value = knuth_morris_pratt(str, substr, start, end, RFIND_MODE, NULL);
+    if ((_return_value == -1) && PyErr_Occurred()) {
+        goto exit;
+    }
+    if (_return_value == -1) {
+        PyErr_SetString(PyExc_ValueError, "substring not found");
         goto exit;
     }
     return_value = PyLong_FromSsize_t(_return_value);
@@ -1104,7 +1210,7 @@ PyUTF8Str_Repeat(PyObject *str, Py_ssize_t n)
 
     /* no repeat, return original string */
     if (n == 1)
-        return Py_NewRef(str);
+        return utf8_result_unchanged(str);
 
     len = PyUTF8Str_BYTE_COUNT(str);
 
@@ -1227,9 +1333,11 @@ int PyUTF8Str_Contains(PyObject *str, PyObject *substr) {
 }
 
 static PyMethodDef utf8str_methods[] = {
-    {"find", _PyCFunction_CAST(utf8str_find), METH_FASTCALL, unicode_find__doc__},
-    {"rfind", _PyCFunction_CAST(utf8str_rfind), METH_FASTCALL, unicode_rfind__doc__},
-    {"count", _PyCFunction_CAST(utf8str_count), METH_FASTCALL, unicode_count__doc__},
+    {"find", _PyCFunction_CAST(utf8str_find), METH_FASTCALL, utf8str_find__doc__},
+    {"rfind", _PyCFunction_CAST(utf8str_rfind), METH_FASTCALL, utf8str_rfind__doc__},
+    {"count", _PyCFunction_CAST(utf8str_count), METH_FASTCALL, utf8str_count__doc__},
+    {"index", _PyCFunction_CAST(utf8str_index), METH_FASTCALL, utf8str_index__doc__},
+    {"rindex", _PyCFunction_CAST(utf8str_rindex), METH_FASTCALL, utf8str_rindex__doc__},
     {"isascii", _PyCFunction_CAST(utf8str_isascii), METH_NOARGS, utf8str_isascii__doc__},
     {"join", (PyCFunction)PyUTF8Str_Join, METH_O, utf8str_join__doc__},
     {NULL, NULL}
