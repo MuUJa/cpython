@@ -491,6 +491,10 @@ w_complex_object(PyObject *v, char flag, WFILE *p)
             Py_DECREF(utf8);
         }
     }
+    else if (PyUTF8Str_CheckExact(v)) {
+        W_TYPE(TYPE_UNICODE, p);
+        w_pstring(PyUTF8Str_DATA(v), PyUTF8Str_BYTE_COUNT(v), p);
+    }
     else if (PyTuple_CheckExact(v)) {
         n = PyTuple_GET_SIZE(v);
         if (p->version >= 4 && n < 256) {

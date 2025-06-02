@@ -95,6 +95,13 @@ static inline void PyUTF8Str_SET_INDEX(PyObject *op, PyUTF8Index *x) {
 }
 #define PyUTF8Str_SET_INDEX(op, x) PyUTF8Str_SET_INDEX(_PyObject_CAST(op), x)
 
+
+PyAPI_FUNC(PyObject*) PyUTF8Str_FromStringAndSize(
+    const char *u,             /* UTF-8 encoded string */
+    Py_ssize_t size            /* size of buffer */
+    );
+
+
 #ifdef __cplusplus
 }
 #endif

@@ -184,6 +184,8 @@ decode_bytes_with_escapes(Parser *p, const char *s, Py_ssize_t len, Token *t)
 PyObject *
 _PyPegen_decode_string(Parser *p, int raw, const char *s, size_t len, Token *t)
 {
+    return PyUTF8Str_FromStringAndSize(s, len);
+
     if (raw) {
         return PyUnicode_DecodeUTF8Stateful(s, (Py_ssize_t)len, NULL, NULL);
     }

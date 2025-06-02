@@ -33,6 +33,8 @@ class BaseTest:
     # as str objects. fixtype() can be used to propagate
     # these arguments to the appropriate type
     def fixtype(self, obj):
+        if isinstance(obj, _str):
+            return self.__class__.type2test(obj)
         if isinstance(obj, str):
             return self.__class__.type2test(obj)
         elif isinstance(obj, list):

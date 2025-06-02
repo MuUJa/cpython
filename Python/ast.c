@@ -176,6 +176,7 @@ validate_constant(struct validator *state, PyObject *value)
             || PyComplex_CheckExact(value)
             || PyBool_Check(value)
             || PyUnicode_CheckExact(value)
+            || PyUTF8Str_CheckExact(value)
             || PyBytes_CheckExact(value))
         return 1;
 

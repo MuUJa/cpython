@@ -668,6 +668,24 @@ PyObject * _PyUTF8Str_Empty() {
     return PyUTF8Str_FromData((unsigned char *)"", 0);
 }
 
+PyObject*
+PyUTF8Str_FromStringAndSize(const char *u, Py_ssize_t size) {
+    if (size < 0) {
+        PyErr_SetString(PyExc_SystemError,
+                        "Negative size passed to PyUnicode_FromStringAndSize");
+        return NULL;
+    }
+    if (u != NULL) {
+        return PyUTF8Str_FromData((unsigned char *)u, size);
+    }
+    if (size > 0) {
+        PyErr_SetString(PyExc_SystemError,
+            "NULL string with positive size with NULL passed to PyUnicode_FromStringAndSize");
+        return NULL;
+    }
+    return _PyUTF8Str_Empty();
+}
+
 PyObject *_PyUTF8Str_Copy(PyObject * str) {
     if (!PyUTF8Str_Check(str)) {
         PyErr_BadInternalCall();
