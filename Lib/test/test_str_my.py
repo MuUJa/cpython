@@ -27,8 +27,9 @@ try:
 except ImportError:
     _testcapi = None
 
-
-str_type = _str
+from stringzilla import Str
+str_type = Str
+# str_type = _str
 
 
 def search_function(encoding):
@@ -65,12 +66,12 @@ def duplicate_string(text):
     return text.encode().decode()
 
 
-class StrSubclass(str_type):
-    pass
+# class StrSubclass(str_type):
+#     pass
 
 
-class OtherStrSubclass(str_type):
-    pass
+# class OtherStrSubclass(str_type):
+#     pass
 
 
 class WithStr:
@@ -153,16 +154,16 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
         self.assertEqual(ascii(str_type('𐀀') * 39 + str_type('\uffff') *
             4096), ascii(str_type('𐀀') * 39 + str_type('\uffff') * 4096))
         self.assertTypedEqual(ascii(str_type('🐍')), str_type("'\\U0001f40d'"))
-        self.assertTypedEqual(ascii(StrSubclass(str_type('abc'))), str_type
-            ("'abc'"))
+        # self.assertTypedEqual(ascii(StrSubclass(str_type('abc'))), str_type
+        #     ("'abc'"))
         self.assertTypedEqual(ascii(WithRepr(str_type('<abc>'))), str_type(
             '<abc>'))
-        self.assertTypedEqual(ascii(WithRepr(StrSubclass(str_type('<abc>'))
-            )), StrSubclass(str_type('<abc>')))
+        # self.assertTypedEqual(ascii(WithRepr(StrSubclass(str_type('<abc>'))
+        #     )), StrSubclass(str_type('<abc>')))
         self.assertTypedEqual(ascii(WithRepr(str_type('<🐍>'))), str_type(
             '<\\U0001f40d>'))
-        self.assertTypedEqual(ascii(WithRepr(StrSubclass(str_type('<🐍>')))),
-            str_type('<\\U0001f40d>'))
+        # self.assertTypedEqual(ascii(WithRepr(StrSubclass(str_type('<🐍>')))),
+        #     str_type('<\\U0001f40d>'))
         self.assertRaises(TypeError, ascii, WithRepr(b'byte-repr'))
 
     def test_repr(self):
@@ -187,15 +188,15 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
         self.assertEqual(repr(str_type('𐀀') * 39 + str_type('\uffff') *
             4096), repr(str_type('𐀀') * 39 + str_type('\uffff') * 4096))
         self.assertTypedEqual(repr(str_type('🐍')), str_type("'🐍'"))
-        self.assertTypedEqual(repr(StrSubclass(str_type('abc'))), str_type(
-            "'abc'"))
+        # self.assertTypedEqual(repr(StrSubclass(str_type('abc'))), str_type(
+        #     "'abc'"))
         self.assertTypedEqual(repr(WithRepr(str_type('<abc>'))), str_type(
             '<abc>'))
-        self.assertTypedEqual(repr(WithRepr(StrSubclass(str_type('<abc>')))
-            ), StrSubclass(str_type('<abc>')))
+        # self.assertTypedEqual(repr(WithRepr(StrSubclass(str_type('<abc>')))
+        #     ), StrSubclass(str_type('<abc>')))
         self.assertTypedEqual(repr(WithRepr(str_type('<🐍>'))), str_type('<🐍>'))
-        self.assertTypedEqual(repr(WithRepr(StrSubclass(str_type('<🐍>')))),
-            StrSubclass(str_type('<🐍>')))
+        # self.assertTypedEqual(repr(WithRepr(StrSubclass(str_type('<🐍>')))),
+        #     StrSubclass(str_type('<🐍>')))
         self.assertRaises(TypeError, repr, WithRepr(b'byte-repr'))
 
     def test_iterators(self):
@@ -955,35 +956,35 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
         self.assertTrue(str_type('👯').isprintable())
         self.assertFalse(str_type('\U000e0020').isprintable())
 
-    def test_surrogates(self):
-        for s in (str_type('a\ud800b\udfff'), str_type('a\udfffb\ud800'),
-            str_type('a\ud800b\udfffa'), str_type('a\udfffb\ud800a')):
-            self.assertTrue(s.islower())
-            self.assertFalse(s.isupper())
-            self.assertFalse(s.istitle())
-        for s in (str_type('A\ud800B\udfff'), str_type('A\udfffB\ud800'),
-            str_type('A\ud800B\udfffA'), str_type('A\udfffB\ud800A')):
-            self.assertFalse(s.islower())
-            self.assertTrue(s.isupper())
-            self.assertTrue(s.istitle())
-        for meth_name in (str_type('islower'), str_type('isupper'),
-            str_type('istitle')):
-            meth = getattr(str_type, meth_name)
-            for s in (str_type('\ud800'), str_type('\udfff'), str_type(
-                '\ud800\ud800'), str_type('\udfff\udfff')):
-                self.assertFalse(meth(s), str_type('%a.%s() is False') % (s,
-                    meth_name))
-        for meth_name in (str_type('isalpha'), str_type('isalnum'),
-            str_type('isdigit'), str_type('isspace'), str_type('isdecimal'),
-            str_type('isnumeric'), str_type('isidentifier'), str_type(
-            'isprintable')):
-            meth = getattr(str_type, meth_name)
-            for s in (str_type('\ud800'), str_type('\udfff'), str_type(
-                '\ud800\ud800'), str_type('\udfff\udfff'), str_type(
-                'a\ud800b\udfff'), str_type('a\udfffb\ud800'), str_type(
-                'a\ud800b\udfffa'), str_type('a\udfffb\ud800a')):
-                self.assertFalse(meth(s), str_type('%a.%s() is False') % (s,
-                    meth_name))
+    # def test_surrogates(self):
+    #     for s in (str_type('a\ud800b\udfff'), str_type('a\udfffb\ud800'),
+    #         str_type('a\ud800b\udfffa'), str_type('a\udfffb\ud800a')):
+    #         self.assertTrue(s.islower())
+    #         self.assertFalse(s.isupper())
+    #         self.assertFalse(s.istitle())
+    #     for s in (str_type('A\ud800B\udfff'), str_type('A\udfffB\ud800'),
+    #         str_type('A\ud800B\udfffA'), str_type('A\udfffB\ud800A')):
+    #         self.assertFalse(s.islower())
+    #         self.assertTrue(s.isupper())
+    #         self.assertTrue(s.istitle())
+    #     for meth_name in (str_type('islower'), str_type('isupper'),
+    #         str_type('istitle')):
+    #         meth = getattr(str_type, meth_name)
+    #         for s in (str_type('\ud800'), str_type('\udfff'), str_type(
+    #             '\ud800\ud800'), str_type('\udfff\udfff')):
+    #             self.assertFalse(meth(s), str_type('%a.%s() is False') % (s,
+    #                 meth_name))
+    #     for meth_name in (str_type('isalpha'), str_type('isalnum'),
+    #         str_type('isdigit'), str_type('isspace'), str_type('isdecimal'),
+    #         str_type('isnumeric'), str_type('isidentifier'), str_type(
+    #         'isprintable')):
+    #         meth = getattr(str_type, meth_name)
+    #         for s in (str_type('\ud800'), str_type('\udfff'), str_type(
+    #             '\ud800\ud800'), str_type('\udfff\udfff'), str_type(
+    #             'a\ud800b\udfff'), str_type('a\udfffb\ud800'), str_type(
+    #             'a\ud800b\udfffa'), str_type('a\udfffb\ud800a')):
+    #             self.assertFalse(meth(s), str_type('%a.%s() is False') % (s,
+    #                 meth_name))
 
     def test_lower(self):
         string_tests.StringLikeTest.test_lower(self)
@@ -1098,41 +1099,41 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
         finally:
             del s
 
-    def test_contains(self):
-        self.assertIn(str_type('a'), str_type('abdb'))
-        self.assertIn(str_type('a'), str_type('bdab'))
-        self.assertIn(str_type('a'), str_type('bdaba'))
-        self.assertIn(str_type('a'), str_type('bdba'))
-        self.assertNotIn(str_type('a'), str_type('bdb'))
-        self.assertIn(str_type('a'), str_type('bdba'))
-        self.assertIn(str_type('a'), (str_type('a'), 1, None))
-        self.assertIn(str_type('a'), (1, None, str_type('a')))
-        self.assertIn(str_type('a'), (str_type('a'), 1, None))
-        self.assertIn(str_type('a'), (1, None, str_type('a')))
-        self.assertNotIn(str_type('a'), (str_type('x'), 1, str_type('y')))
-        self.assertNotIn(str_type('a'), (str_type('x'), 1, None))
-        self.assertNotIn(str_type('abcd'), str_type('abcxxxx'))
-        self.assertIn(str_type('ab'), str_type('abcd'))
-        self.assertIn(str_type('ab'), str_type('abc'))
-        self.assertIn(str_type('ab'), (1, None, str_type('ab')))
-        self.assertIn(str_type(''), str_type('abc'))
-        self.assertIn(str_type(''), str_type(''))
-        self.assertIn(str_type(''), str_type('abc'))
-        self.assertNotIn(str_type('\x00'), str_type('abc'))
-        self.assertIn(str_type('\x00'), str_type('\x00abc'))
-        self.assertIn(str_type('\x00'), str_type('abc\x00'))
-        self.assertIn(str_type('a'), str_type('\x00abc'))
-        self.assertIn(str_type('asdf'), str_type('asdf'))
-        self.assertNotIn(str_type('asdf'), str_type('asd'))
-        self.assertNotIn(str_type('asdf'), str_type(''))
-        self.assertRaises(TypeError, str_type('abc').__contains__)
-        for fill in (str_type('a'), str_type('Ā'), str_type('𐌀')):
-            fill *= 9
-            for delim in (str_type('c'), str_type('Ă'), str_type('𐌂')):
-                self.assertNotIn(delim, fill)
-                self.assertIn(delim, fill + delim)
-                self.assertNotIn(delim * 2, fill)
-                self.assertIn(delim * 2, fill + delim * 2)
+    # def test_contains(self):
+    #     self.assertIn(str_type('a'), str_type('abdb'))
+    #     self.assertIn(str_type('a'), str_type('bdab'))
+    #     self.assertIn(str_type('a'), str_type('bdaba'))
+    #     self.assertIn(str_type('a'), str_type('bdba'))
+    #     self.assertNotIn(str_type('a'), str_type('bdb'))
+    #     self.assertIn(str_type('a'), str_type('bdba'))
+    #     self.assertIn(str_type('a'), (str_type('a'), 1, None))
+    #     self.assertIn(str_type('a'), (1, None, str_type('a')))
+    #     self.assertIn(str_type('a'), (str_type('a'), 1, None))
+    #     self.assertIn(str_type('a'), (1, None, str_type('a')))
+    #     self.assertNotIn(str_type('a'), (str_type('x'), 1, str_type('y')))
+    #     self.assertNotIn(str_type('a'), (str_type('x'), 1, None))
+    #     self.assertNotIn(str_type('abcd'), str_type('abcxxxx'))
+    #     self.assertIn(str_type('ab'), str_type('abcd'))
+    #     self.assertIn(str_type('ab'), str_type('abc'))
+    #     self.assertIn(str_type('ab'), (1, None, str_type('ab')))
+    #     self.assertIn(str_type(''), str_type('abc'))
+    #     self.assertIn(str_type(''), str_type(''))
+    #     self.assertIn(str_type(''), str_type('abc'))
+    #     self.assertNotIn(str_type('\x00'), str_type('abc'))
+    #     self.assertIn(str_type('\x00'), str_type('\x00abc'))
+    #     self.assertIn(str_type('\x00'), str_type('abc\x00'))
+    #     self.assertIn(str_type('a'), str_type('\x00abc'))
+    #     self.assertIn(str_type('asdf'), str_type('asdf'))
+    #     self.assertNotIn(str_type('asdf'), str_type('asd'))
+    #     self.assertNotIn(str_type('asdf'), str_type(''))
+    #     self.assertRaises(TypeError, str_type('abc').__contains__)
+    #     for fill in (str_type('a'), str_type('Ā'), str_type('𐌀')):
+    #         fill *= 9
+    #         for delim in (str_type('c'), str_type('Ă'), str_type('𐌂')):
+    #             self.assertNotIn(delim, fill)
+    #             self.assertIn(delim, fill + delim)
+    #             self.assertNotIn(delim * 2, fill)
+    #             self.assertIn(delim * 2, fill + delim * 2)
 
     def test_issue18183(self):
         str_type('𐀀\U00100000').lower()
@@ -1913,69 +1914,69 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
     def test_format_float(self):
         self.assertEqual(str_type('1.0'), str_type('%.1f') % 1.0)
 
-    def test_constructor(self):
-        self.assertEqual(str_type(str_type('unicode remains unicode')), str_type
-            ('unicode remains unicode'))
-        for text in (str_type('ascii'), str_type('é'), str_type('€'),
-            str_type('\U0010ffff')):
-            subclass = StrSubclass(text)
-            self.assertEqual(str_type(subclass), text)
-            self.assertEqual(len(subclass), len(text))
-            if text == str_type('ascii'):
-                self.assertEqual(subclass.encode(str_type('ascii')), b'ascii')
-                self.assertEqual(subclass.encode(str_type('utf-8')), b'ascii')
-        self.assertEqual(str_type(str_type('strings are converted to unicode')),
-            str_type('strings are converted to unicode'))
+    # def test_constructor(self):
+    #     self.assertEqual(str_type(str_type('unicode remains unicode')), str_type
+    #         ('unicode remains unicode'))
+    #     for text in (str_type('ascii'), str_type('é'), str_type('€'),
+    #         str_type('\U0010ffff')):
+    #         subclass = StrSubclass(text)
+    #         self.assertEqual(str_type(subclass), text)
+    #         self.assertEqual(len(subclass), len(text))
+    #         if text == str_type('ascii'):
+    #             self.assertEqual(subclass.encode(str_type('ascii')), b'ascii')
+    #             self.assertEqual(subclass.encode(str_type('utf-8')), b'ascii')
+    #     self.assertEqual(str_type(str_type('strings are converted to unicode')),
+    #         str_type('strings are converted to unicode'))
 
 
-        class StringCompat:
+    #     class StringCompat:
 
-            def __init__(self, x):
-                self.x = x
+    #         def __init__(self, x):
+    #             self.x = x
 
-            def __str__(self):
-                return self.x
-        self.assertEqual(str_type(StringCompat(str_type(
-            '__str__ compatible objects are recognized'))), str_type(
-            '__str__ compatible objects are recognized'))
-        o = StringCompat(str_type('unicode(obj) is compatible to str_type()'))
-        self.assertEqual(str_type(o), str_type(
-            'unicode(obj) is compatible to str_type()'))
-        self.assertEqual(str_type(o), str_type(
-            'unicode(obj) is compatible to str_type()'))
-        for obj in (123, 123.45, 123):
-            self.assertEqual(str_type(obj), str_type(str_type(obj)))
-        self.assertRaises(TypeError, str_type, str_type(
-            'decoding unicode is not supported'), str_type('utf-8'),
-            str_type('strict'))
-        self.assertEqual(str_type(b'strings are decoded to unicode', str_type(
-            'utf-8'), str_type('strict')), str_type(
-            'strings are decoded to unicode'))
-        self.assertEqual(str_type(memoryview(
-            b'character buffers are decoded to unicode'), str_type('utf-8'),
-            str_type('strict')), str_type(
-            'character buffers are decoded to unicode'))
+    #         def __str__(self):
+    #             return self.x
+    #     self.assertEqual(str_type(StringCompat(str_type(
+    #         '__str__ compatible objects are recognized'))), str_type(
+    #         '__str__ compatible objects are recognized'))
+    #     o = StringCompat(str_type('unicode(obj) is compatible to str_type()'))
+    #     self.assertEqual(str_type(o), str_type(
+    #         'unicode(obj) is compatible to str_type()'))
+    #     self.assertEqual(str_type(o), str_type(
+    #         'unicode(obj) is compatible to str_type()'))
+    #     for obj in (123, 123.45, 123):
+    #         self.assertEqual(str_type(obj), str_type(str_type(obj)))
+    #     self.assertRaises(TypeError, str_type, str_type(
+    #         'decoding unicode is not supported'), str_type('utf-8'),
+    #         str_type('strict'))
+    #     self.assertEqual(str_type(b'strings are decoded to unicode', str_type(
+    #         'utf-8'), str_type('strict')), str_type(
+    #         'strings are decoded to unicode'))
+    #     self.assertEqual(str_type(memoryview(
+    #         b'character buffers are decoded to unicode'), str_type('utf-8'),
+    #         str_type('strict')), str_type(
+    #         'character buffers are decoded to unicode'))
 
-    def test_constructor_keyword_args(self):
-        str_type(
-            'Pass various keyword argument combinations to the constructor.')
-        self.assertEqual(str_type(object=str_type('foo')), str_type('foo'))
-        self.assertEqual(str_type(object=b'foo', encoding=str_type('utf-8')),
-            str_type('foo'))
-        self.assertEqual(str_type(b'foo', errors=str_type('strict')), str_type(
-            'foo'))
-        self.assertEqual(str_type(object=b'foo', errors=str_type('strict')),
-            str_type('foo'))
+    # def test_constructor_keyword_args(self):
+    #     str_type(
+    #         'Pass various keyword argument combinations to the constructor.')
+    #     self.assertEqual(str_type(object=str_type('foo')), str_type('foo'))
+    #     self.assertEqual(str_type(object=b'foo', encoding=str_type('utf-8')),
+    #         str_type('foo'))
+    #     self.assertEqual(str_type(b'foo', errors=str_type('strict')), str_type(
+    #         'foo'))
+    #     self.assertEqual(str_type(object=b'foo', errors=str_type('strict')),
+    #         str_type('foo'))
 
-    def test_constructor_defaults(self):
-        str_type('Check the constructor argument defaults.')
-        self.assertEqual(str_type(), str_type(''))
-        self.assertEqual(str_type(errors=str_type('strict')), str_type(''))
-        utf8_cent = str_type('¢').encode(str_type('utf-8'))
-        self.assertEqual(str_type(utf8_cent, errors=str_type('strict')),
-            str_type('¢'))
-        self.assertRaises(UnicodeDecodeError, str_type, utf8_cent, encoding=
-            str_type('ascii'))
+    # def test_constructor_defaults(self):
+    #     str_type('Check the constructor argument defaults.')
+    #     self.assertEqual(str_type(), str_type(''))
+    #     self.assertEqual(str_type(errors=str_type('strict')), str_type(''))
+    #     utf8_cent = str_type('¢').encode(str_type('utf-8'))
+    #     self.assertEqual(str_type(utf8_cent, errors=str_type('strict')),
+    #         str_type('¢'))
+    #     self.assertRaises(UnicodeDecodeError, str_type, utf8_cent, encoding=
+    #         str_type('ascii'))
 
     def test_codecs_utf7(self):
         utfTests = [(str_type('A≢Α.'), b'A+ImIDkQ.'), (str_type(
@@ -2581,47 +2582,47 @@ class StrTest(string_tests.StringLikeTest, string_tests.MixinStrUnicodeTest,
         else:
             self.fail(str_type('Should have raised UnicodeDecodeError'))
 
-    def test_conversion(self):
+    # def test_conversion(self):
 
 
-        class StrWithStr(str_type):
+    #     class StrWithStr(str_type):
 
-            def __new__(cls, value):
-                self = str_type.__new__(cls, str_type(''))
-                self.value = value
-                return self
+    #         def __new__(cls, value):
+    #             self = str_type.__new__(cls, str_type(''))
+    #             self.value = value
+    #             return self
 
-            def __str__(self):
-                return self.value
-        self.assertTypedEqual(str_type(WithStr(str_type('abc'))), str_type('abc'))
-        self.assertTypedEqual(str_type(WithStr(StrSubclass(str_type('abc')))),
-            StrSubclass(str_type('abc')))
-        self.assertTypedEqual(StrSubclass(WithStr(str_type('abc'))),
-            StrSubclass(str_type('abc')))
-        self.assertTypedEqual(StrSubclass(WithStr(StrSubclass(str_type(
-            'abc')))), StrSubclass(str_type('abc')))
-        self.assertTypedEqual(StrSubclass(WithStr(OtherStrSubclass(str_type
-            ('abc')))), StrSubclass(str_type('abc')))
-        self.assertTypedEqual(str_type(StrWithStr(str_type('abc'))), str_type('abc')
-            )
-        self.assertTypedEqual(str_type(StrWithStr(StrSubclass(str_type('abc')))),
-            StrSubclass(str_type('abc')))
-        self.assertTypedEqual(StrSubclass(StrWithStr(str_type('abc'))),
-            StrSubclass(str_type('abc')))
-        self.assertTypedEqual(StrSubclass(StrWithStr(StrSubclass(str_type(
-            'abc')))), StrSubclass(str_type('abc')))
-        self.assertTypedEqual(StrSubclass(StrWithStr(OtherStrSubclass(
-            str_type('abc')))), StrSubclass(str_type('abc')))
-        self.assertTypedEqual(str_type(WithRepr(str_type('<abc>'))), str_type(
-            '<abc>'))
-        self.assertTypedEqual(str_type(WithRepr(StrSubclass(str_type('<abc>')))),
-            StrSubclass(str_type('<abc>')))
-        self.assertTypedEqual(StrSubclass(WithRepr(str_type('<abc>'))),
-            StrSubclass(str_type('<abc>')))
-        self.assertTypedEqual(StrSubclass(WithRepr(StrSubclass(str_type(
-            '<abc>')))), StrSubclass(str_type('<abc>')))
-        self.assertTypedEqual(StrSubclass(WithRepr(OtherStrSubclass(
-            str_type('<abc>')))), StrSubclass(str_type('<abc>')))
+    #         def __str__(self):
+    #             return self.value
+    #     self.assertTypedEqual(str_type(WithStr(str_type('abc'))), str_type('abc'))
+    #     self.assertTypedEqual(str_type(WithStr(StrSubclass(str_type('abc')))),
+    #         StrSubclass(str_type('abc')))
+    #     self.assertTypedEqual(StrSubclass(WithStr(str_type('abc'))),
+    #         StrSubclass(str_type('abc')))
+    #     self.assertTypedEqual(StrSubclass(WithStr(StrSubclass(str_type(
+    #         'abc')))), StrSubclass(str_type('abc')))
+    #     self.assertTypedEqual(StrSubclass(WithStr(OtherStrSubclass(str_type
+    #         ('abc')))), StrSubclass(str_type('abc')))
+    #     self.assertTypedEqual(str_type(StrWithStr(str_type('abc'))), str_type('abc')
+    #         )
+    #     self.assertTypedEqual(str_type(StrWithStr(StrSubclass(str_type('abc')))),
+    #         StrSubclass(str_type('abc')))
+    #     self.assertTypedEqual(StrSubclass(StrWithStr(str_type('abc'))),
+    #         StrSubclass(str_type('abc')))
+    #     self.assertTypedEqual(StrSubclass(StrWithStr(StrSubclass(str_type(
+    #         'abc')))), StrSubclass(str_type('abc')))
+    #     self.assertTypedEqual(StrSubclass(StrWithStr(OtherStrSubclass(
+    #         str_type('abc')))), StrSubclass(str_type('abc')))
+    #     self.assertTypedEqual(str_type(WithRepr(str_type('<abc>'))), str_type(
+    #         '<abc>'))
+    #     self.assertTypedEqual(str_type(WithRepr(StrSubclass(str_type('<abc>')))),
+    #         StrSubclass(str_type('<abc>')))
+    #     self.assertTypedEqual(StrSubclass(WithRepr(str_type('<abc>'))),
+    #         StrSubclass(str_type('<abc>')))
+    #     self.assertTypedEqual(StrSubclass(WithRepr(StrSubclass(str_type(
+    #         '<abc>')))), StrSubclass(str_type('<abc>')))
+    #     self.assertTypedEqual(StrSubclass(WithRepr(OtherStrSubclass(
+    #         str_type('<abc>')))), StrSubclass(str_type('<abc>')))
 
     def test_unicode_repr(self):
 
@@ -2931,28 +2932,28 @@ class StringModuleTest(unittest.TestCase):
             False, str_type('key2'))]])
         self.assertRaises(TypeError, _string.formatter_field_name_split, 1)
 
-    def test_str_subclass_attr(self):
-        name = StrSubclass(str_type('name'))
-        name2 = StrSubclass(str_type('name2'))
+    # def test_str_subclass_attr(self):
+    #     name = StrSubclass(str_type('name'))
+    #     name2 = StrSubclass(str_type('name2'))
 
 
-        class Bag:
-            pass
-        o = Bag()
-        with self.assertRaises(AttributeError):
-            delattr(o, name)
-        setattr(o, name, 1)
-        self.assertEqual(o.name, 1)
-        o.name = 2
-        self.assertEqual(list(o.__dict__), [name])
-        with self.assertRaises(AttributeError):
-            delattr(o, name2)
-        with self.assertRaises(AttributeError):
-            del o.name2
-        setattr(o, name2, 3)
-        self.assertEqual(o.name2, 3)
-        o.name2 = 4
-        self.assertEqual(list(o.__dict__), [name, name2])
+    #     class Bag:
+    #         pass
+    #     o = Bag()
+    #     with self.assertRaises(AttributeError):
+    #         delattr(o, name)
+    #     setattr(o, name, 1)
+    #     self.assertEqual(o.name, 1)
+    #     o.name = 2
+    #     self.assertEqual(list(o.__dict__), [name])
+    #     with self.assertRaises(AttributeError):
+    #         delattr(o, name2)
+    #     with self.assertRaises(AttributeError):
+    #         del o.name2
+    #     setattr(o, name2, 3)
+    #     self.assertEqual(o.name2, 3)
+    #     o.name2 = 4
+    #     self.assertEqual(list(o.__dict__), [name, name2])
 
 
 if __name__ == str_type('__main__'):

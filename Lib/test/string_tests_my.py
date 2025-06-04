@@ -7,8 +7,9 @@ from test.support import import_helper
 from collections import UserList
 import random
 
-
-str_type = _str
+from stringzilla import Str
+str_type = Str
+# str_type = _str
 
 
 class Sequence:

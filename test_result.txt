@@ -1,0 +1,6 @@
+test_comparison (__main__.StrTest.test_comparison) ... ok
+test_concatenation (__main__.StrTest.test_concatenation) ... ok
+test_fixtype (__main__.StrTest.test_fixtype) ... ok
+test_hash (__main__.StrTest.test_hash) ... ok
+test_isspace_invariant (__main__.StrTest.test_isspace_invariant) ... ok
+test_iterators_invocation (__main__.StrTest.test_iterators_invocation) ... ok
